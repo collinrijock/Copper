@@ -7,8 +7,11 @@
 WORLD="${1:?usage: stop.sh WORLD|all}"
 if [ "$WORLD" = all ]; then
     for f in /tmp/copper-*.pid; do [ -e "$f" ] && "$0" "$(basename "$f" .pid | sed 's/^copper-//')"; done
-    pkill -f "Copper-gauntlet/.*/build/Copper.app/Contents/MacOS/Copper" 2>/dev/null || true
-    pkill -f "Developer/Copper/build/Copper.app/Contents/MacOS/Copper" 2>/dev/null || true
+    # Anything launched into a probe world, whatever started it. The user's
+    # own Copper has no SEARCH_PROBE in its environment and is left alone.
+    for pid in $(pgrep -f "build/Copper.app/Contents/MacOS/Copper"); do
+        if ps eww -p "$pid" 2>/dev/null | grep -q "SEARCH_PROBE="; then kill "$pid" 2>/dev/null || true; fi
+    done
     exit 0
 fi
 PID_FILE="/tmp/copper-$WORLD.pid"
@@ -18,6 +21,6 @@ if [ -e "$PID_FILE" ]; then
 fi
 # A leftover from before pid files, or one launched by hand.
 for pid in $(pgrep -f "build/Copper.app/Contents/MacOS/Copper"); do
-    if ps eww -p "$pid" 2>/dev/null | grep -q "SEARCH_PROBE=$WORLD\b"; then kill "$pid" 2>/dev/null || true; fi
+    if ps eww -p "$pid" 2>/dev/null | grep -q "SEARCH_PROBE=$WORLD "; then kill "$pid" 2>/dev/null || true; fi
 done
 sleep 0.3
