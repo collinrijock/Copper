@@ -115,6 +115,11 @@ def main(argv):
     elif verb == "bar":
         request["text"] = args[0] if args else ""
         request["go"] = "--go" in args
+    elif verb == "summon":
+        request["text"] = args[0] if args else ""
+    elif verb == "window":
+        if not args: sys.exit("usage: bench window PATH")
+        request["path"] = os.path.abspath(args[0])
     elif verb == "spaces":
         request["op"] = args[0] if args else "list"
         request["arg"] = args[1] if len(args) > 1 else ""

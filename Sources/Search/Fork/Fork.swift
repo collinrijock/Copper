@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 // Everything Copper adds to Search lives under Fork/. Upstream files get
@@ -31,6 +32,21 @@ enum Fork {
             if request["go"] as? Bool == true, !browser.offers.isEmpty { browser.picked = 0; browser.submit() }
             else { browser.editing = false; browser.typed = "" }
             return ["offers": rows]
+        case "summon":
+            // ⌘K left open with this text in it, for a look at the bar itself.
+            browser.summon()
+            browser.typed = request["text"] as? String ?? ""
+            return ["offers": browser.offers.count]
+        case "window":
+            // The whole window as the compositor shows it — sidebar, page,
+            // panels — to a PNG. An app may always picture its own windows.
+            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.level == .normal }),
+                  let path = request["path"] as? String else { return ["error": "window needs a path"] }
+            guard let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(window.windowNumber), [.boundsIgnoreFraming, .bestResolution]) else { return ["error": "no image"] }
+            let rep = NSBitmapImageRep(cgImage: image)
+            guard let png = rep.representation(using: .png, properties: [:]) else { return ["error": "no png"] }
+            do { try png.write(to: URL(fileURLWithPath: path)) } catch { return ["error": "\(error)"] }
+            return ["path": path, "size": [image.width, image.height]]
         default: return ["error": "unknown verb \(verb)"]
         }
     }

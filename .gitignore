@@ -10,3 +10,6 @@ build/
 *.provisionprofile
 *.p12
 *.mobileprovision
+
+# Gauntlet shots are regenerated every round.
+.gauntlet/shots/
