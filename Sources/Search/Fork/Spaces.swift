@@ -27,6 +27,13 @@ final class Spaces: ObservableObject {
     @Published private(set) var all: [Space]
     @Published private(set) var current: UUID
 
+    /// The rows that came back from the last session. Arc splits its column
+    /// into the tabs you keep and the tabs you opened today; Copper's session
+    /// file has no flag for that, but everything restored at launch *is*
+    /// what you kept, and everything opened since is today's. The column
+    /// draws the New Tab row on that seam.
+    @Published private(set) var carried: Set<Tab.ID> = []
+
     /// The rows not on screen, by space.
     private var parked: [UUID: (tabs: [Tab], active: Tab.ID?)] = [:]
     var parkedTabs: [Tab] { parked.values.flatMap(\.tabs) }
@@ -168,6 +175,7 @@ final class Spaces: ObservableObject {
             current = saved.space.flatMap { c in spaces.first { $0.id == c }?.id } ?? spaces[0].id
         }
         var rows: [UUID: (tabs: [Tab], active: Tab.ID?)] = [:]
+        carried = []
         for (i, entry) in saved.tabs.enumerated() {
             guard let url = URL(string: entry.url) else { continue }
             let id = entry.space.flatMap { s in all.first { $0.id == s }?.id } ?? current
@@ -175,6 +183,7 @@ final class Spaces: ObservableObject {
             browser.prepare(tab)
             tab.restore(url: url, title: entry.title)
             tab.pin = entry.pin
+            carried.insert(tab.id)
             var row = rows[id] ?? ([], nil)
             row.tabs.append(tab)
             // Upstream's file has no `active` flag — its `active` index does.
@@ -209,50 +218,133 @@ extension Session.Entry {
 struct SpaceStrip: View {
     @ObservedObject var browser: Browser
     @ObservedObject var spaces = Spaces.shared
+    @Environment(\.colorScheme) private var scheme
     @State private var renaming: UUID?
     @State private var profiling: UUID?
     @State private var draft = ""
+    @State private var hovering: UUID?
 
+    private var tint: SpaceTint { SpaceTint(hue: spaces.space.hue, dark: scheme == .dark) }
+
+    /// Arc's foot: the space you are in, named, on the left; every other
+    /// space as a dot in its own colour on the right; a plus at the end.
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(spaces.all) { space in
-                let live = space.id == spaces.current
-                Button { spaces.select(space.id, in: browser) } label: {
-                    HStack(spacing: 5) {
-                        Circle().fill(space.tint).frame(width: 7, height: 7)
-                        if live {
-                            Text(space.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                        }
-                    }
-                    .padding(.horizontal, live ? 8 : 5)
-                    .frame(height: 22)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(live ? Palette.wash : .clear))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(live ? Palette.ink : Palette.muted)
-                .help(space.name)
-                .contextMenu { menu(for: space) }
-                .popover(isPresented: Binding(get: { renaming == space.id }, set: { if !$0 { renaming = nil } })) {
+        HStack(spacing: 2) {
+            here
+            Spacer(minLength: 4)
+            ForEach(spaces.all.filter { $0.id != spaces.current }) { space in
+                dot(space)
+            }
+            plus
+        }
+        .padding(.horizontal, 6)
+        .padding(.bottom, 4)
+        .animation(Motion.glide, value: spaces.current)
+    }
+
+    private var here: some View {
+        let space = spaces.space
+        return Button { spaces.select(space.id, in: browser) } label: {
+            HStack(spacing: 6) {
+                badge(space, size: 15)
+                Text(space.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 24)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.pill))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(tint.ink)
+        .help(space.name)
+        .modifier(menus(for: space))
+    }
+
+    /// A space's emoji if its name starts with one — Arc's spaces nearly all
+    /// do — and its colour as a small rounded chip if it doesn't.
+    @ViewBuilder
+    private func badge(_ space: Space, size: CGFloat) -> some View {
+        if let first = space.name.unicodeScalars.first, first.properties.isEmojiPresentation {
+            Text(String(Character(first)))
+                .font(.system(size: size * 0.8))
+                .frame(width: size, height: size)
+        } else {
+            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+                .fill(SpaceTint(hue: space.hue, dark: scheme == .dark).dot)
+                .frame(width: size * 0.6, height: size * 0.6)
+                .frame(width: size, height: size)
+        }
+    }
+
+    private func dot(_ space: Space) -> some View {
+        Button { spaces.select(space.id, in: browser) } label: {
+            Circle()
+                .fill(SpaceTint(hue: space.hue, dark: scheme == .dark).dot)
+                .frame(width: 8, height: 8)
+                .opacity(hovering == space.id ? 1 : 0.6)
+                .frame(width: 17, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { over in hovering = over ? space.id : (hovering == space.id ? nil : hovering) }
+        .help(space.name)
+        .modifier(menus(for: space))
+    }
+
+    private var plus: some View {
+        Button { spaces.add(in: browser) } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint.faint)
+                .frame(width: 20, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("New Space")
+    }
+
+    /// The right-click menu and the two little name fields, on whichever
+    /// shape stands for the space — the named chip or the dot.
+    private func menus(for space: Space) -> some ViewModifier {
+        SpaceMenus(
+            menu: AnyView(menu(for: space)),
+            renaming: Binding(get: { renaming == space.id }, set: { if !$0 { renaming = nil } }),
+            profiling: Binding(get: { profiling == space.id }, set: { if !$0 { profiling = nil } }),
+            draft: $draft,
+            rename: { spaces.rename(space.id, to: draft); renaming = nil },
+            profile: { spaces.profile(space.id, named: draft); profiling = nil }
+        )
+    }
+
+    private struct SpaceMenus: ViewModifier {
+        let menu: AnyView
+        @Binding var renaming: Bool
+        @Binding var profiling: Bool
+        @Binding var draft: String
+        let rename: () -> Void
+        let profile: () -> Void
+
+        func body(content: Content) -> some View {
+            content
+                .contextMenu { menu }
+                .popover(isPresented: $renaming) {
                     TextField("Name", text: $draft)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 160)
                         .padding(8)
-                        .onSubmit { spaces.rename(space.id, to: draft); renaming = nil }
+                        .onSubmit(rename)
                 }
-                .popover(isPresented: Binding(get: { profiling == space.id }, set: { if !$0 { profiling = nil } })) {
+                .popover(isPresented: $profiling) {
                     TextField("Profile name", text: $draft)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 160)
                         .padding(8)
-                        .onSubmit { spaces.profile(space.id, named: draft); profiling = nil }
+                        .onSubmit(profile)
                 }
-            }
-            Door(icon: "plus", help: "New Space") { spaces.add(in: browser) }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
-        .animation(Motion.glide, value: spaces.current)
     }
 
     @ViewBuilder
