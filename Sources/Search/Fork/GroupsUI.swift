@@ -1,10 +1,13 @@
 import SwiftUI
 
-// How groups look in the column: a small header where a run of grouped
-// tabs starts, a hairline of the group's colour down the left of its rows,
-// and — under a tab that has just landed — one line asking whether it
-// belongs somewhere. The rows themselves are upstream's SideRow, untouched;
-// this only decides what goes between them.
+// How groups look in the column: Arc's folders. A header where a run of
+// grouped tabs starts — chevron, folder glyph in the group's colour, the
+// name, and the count only while it is shut — its rows stepped in under it,
+// and, under a tab that has just landed, one line asking whether it belongs
+// somewhere. Which folder sits inside which is read out of the names by
+// `FolderTree` (Fork/Folders.swift). The rows themselves are upstream's
+// SideRow, untouched; this only decides what goes between them and how far
+// in each one starts.
 
 struct GroupedRows: View {
     @ObservedObject var browser: Browser
@@ -35,65 +38,26 @@ struct GroupedRows: View {
     }
 
     /// What the column draws, top to bottom: a header at the start of each
-    /// run, then the run's rows — none of them while the group is folded.
-    enum Row: Identifiable {
-        case head(TabGroup, count: Int, at: Int)
-        case tab(Tab, index: Int, group: TabGroup?)
+    /// run, then the run's rows — none of them, nor any folder inside it,
+    /// while the folder is shut. Worked out by `FolderTree`.
+    private var rows: [FolderRow] { FolderTree.plan(loose) }
 
-        var id: String {
-            switch self {
-            case .head(let group, _, let at): return "head-\(group.id.uuidString)-\(at)"
-            case .tab(let tab, _, _): return "tab-\(tab.id.uuidString)"
-            }
-        }
-    }
-
-    private var rows: [Row] {
-        var out: [Row] = []
-        var previous: UUID?
-        let tabs = loose
-        for (index, tab) in tabs.enumerated() {
-            let group = groups.group(of: tab)
-            if let group, group.id != previous {
-                var count = 0
-                for later in tabs[index...] {
-                    guard groups.membership[later.id] == group.id else { break }
-                    count += 1
-                }
-                out.append(.head(group, count: count, at: index))
-            }
-            previous = group?.id
-            if group?.collapsed == true { continue }
-            out.append(.tab(tab, index: index, group: group))
-        }
-        return out
-    }
-
-    /// Rows the column shows beyond one per tab: a header for each run,
-    /// less the tabs a folded group hides. For sizing a block before it is
+    /// Rows the column shows beyond one per tab: a header for each folder,
+    /// less the rows a folded one hides. For sizing a block before it is
     /// drawn (see SideBar.today).
     static func extraRows(in tabs: [Tab]) -> Int {
-        let groups = Groups.shared
-        var count = 0
-        var previous: UUID?
-        for tab in tabs where tab.pin == nil {
-            let id = groups.membership[tab.id]
-            if let id, let group = groups.group(id) {
-                if id != previous { count += 1 }
-                if group.collapsed { count -= 1 }
-            }
-            previous = id
-        }
-        return count
+        let loose = tabs.filter { $0.pin == nil }
+        return FolderTree.plan(loose).count - loose.count
     }
 
     var body: some View {
         VStack(spacing: GroupedRows.gap) {
             ForEach(rows) { row in
                 switch row {
-                case .head(let group, let count, _):
-                    GroupHead(browser: browser, group: group, count: count, tint: tint)
-                case .tab(let tab, let index, let group):
+                case .head(let group, let count, _, let depth, let label):
+                    GroupHead(browser: browser, group: group, count: count, label: label, tint: tint)
+                        .padding(.leading, CGFloat(depth) * Folders.step)
+                case .tab(let tab, let index, let group, let depth):
                     let step = GroupedRows.row + GroupedRows.gap
                     let held = dragging == tab.id
                     VStack(spacing: GroupedRows.gap) {
@@ -105,13 +69,18 @@ struct GroupedRows: View {
                             pill: pill,
                             close: { browser.close(tab) }
                         )
+                        .padding(.leading, CGFloat(depth) * Folders.step)
+                        // The folder's colour, as the line its rows hang
+                        // off — where the chevron of the header above them
+                        // is, so the step in reads as a branch and not as a
+                        // row that has slipped.
                         .overlay(alignment: .leading) {
-                            if let group {
+                            if let group, depth > 0 {
                                 RoundedRectangle(cornerRadius: 1)
-                                    .fill(group.tint)
-                                    .frame(width: 2)
-                                    .padding(.vertical, 8)
-                                    .padding(.leading, 2)
+                                    .fill(folderTint(group).opacity(0.28))
+                                    .frame(width: 1.5)
+                                    .padding(.vertical, 3)
+                                    .offset(x: CGFloat(depth - 1) * Folders.step + 10)
                             }
                         }
                         if let asked = grouper.suggestion, asked.tab == tab.id {
@@ -133,6 +102,11 @@ struct GroupedRows: View {
         .onChange(of: browser.tabs.map(\.id)) { _, _ in
             groups.prune(keeping: browser.tabs + Spaces.shared.parkedTabs)
         }
+    }
+
+    /// A folder with no colour of its own wears the space's, as Arc's do.
+    private func folderTint(_ group: TabGroup) -> Color {
+        group.hue.map { Color(hue: $0, saturation: 0.55, brightness: 0.75) } ?? tint.dot
     }
 
     /// Upstream's reorder, unchanged but for the drop: a row let go inside
@@ -168,35 +142,60 @@ struct GroupedRows: View {
     }
 }
 
-/// The line above a run: fold it, name it, colour it, or let it go.
+/// A folder's line: fold it, name it, colour it, make another inside it,
+/// or let it go.
+///
+/// The three columns line up with the rows below it on purpose — the
+/// chevron sits in its own narrow column at the left, the folder glyph
+/// where a favicon goes, and the name where a title does, so a tab stepped
+/// one notch in under this header has its mark under the glyph and its
+/// title under the name.
 struct GroupHead: View {
     @ObservedObject var browser: Browser
     @ObservedObject var groups = Groups.shared
     let group: TabGroup
     let count: Int
+    /// The part of the name below the folder it is in — `BuildrFi`, not
+    /// `Misc › BuildrFi`.
+    var label: String? = nil
     let tint: SpaceTint
 
     @State private var hovering = false
     @State private var renaming = false
+    @State private var adding = false
     @State private var draft = ""
 
+    /// A folder with no colour of its own wears the space's, as Arc's do.
+    private var colour: Color {
+        group.hue.map { Color(hue: $0, saturation: 0.55, brightness: 0.75) } ?? tint.dot
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: group.collapsed ? "chevron.right" : "chevron.down")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(tint.faint)
+        HStack(spacing: 0) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(hovering ? tint.muted : tint.faint)
+                .rotationEffect(.degrees(group.collapsed ? 0 : 90))
                 .frame(width: 10)
-            Circle().fill(group.tint).frame(width: 7, height: 7)
-            Text(group.name)
+                .padding(.trailing, 6)
+            Image(systemName: "folder.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(colour)
+                .frame(width: 16)
+                .padding(.trailing, 8)
+            Text(label ?? group.name)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .foregroundStyle(hovering ? tint.ink : tint.muted)
+                .foregroundStyle(tint.ink)
             Spacer(minLength: 2)
-            Text("\(count)")
-                .font(.system(size: 10))
-                .foregroundStyle(tint.faint)
-                .padding(.trailing, 9)
+            if group.collapsed, count > 0 {
+                Text("\(count)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(tint.faint)
+                    .padding(.trailing, 9)
+                    .transition(.opacity)
+            }
         }
         .padding(.leading, 6)
         .frame(height: GroupedRows.row)
@@ -216,7 +215,18 @@ struct GroupHead: View {
                 .padding(8)
                 .onSubmit { groups.rename(group.id, to: draft); renaming = false }
         }
+        .popover(isPresented: $adding) {
+            TextField("Folder name", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 160)
+                .padding(8)
+                .onSubmit {
+                    groups.createInside(group, named: draft)
+                    adding = false
+                }
+        }
         .animation(Motion.quick, value: hovering)
+        .animation(Motion.settle, value: group.collapsed)
         .transition(.opacity)
     }
 
@@ -234,6 +244,7 @@ struct GroupHead: View {
             }
         }
         Button(group.collapsed ? "Expand" : "Collapse") { groups.toggleCollapsed(group.id) }
+        Button("New Folder Inside…") { draft = ""; adding = true }
         Divider()
         Button("Ungroup") { groups.dissolve(group.id) }
         Button("Close Tabs in Group", role: .destructive) { groups.closeAll(group.id, in: browser) }
