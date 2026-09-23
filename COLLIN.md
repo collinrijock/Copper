@@ -16,10 +16,10 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | Item | Tier | Status |
 |---|---|---|
 | Fork + plan | Setup | done |
-| 1. Spaces (workspaces) | Tier 1 | not started |
-| 2. Profiles per space | Tier 1 | not started |
-| 3. Split view (2–4 panes) | Tier 1 | not started |
-| 4. Command bar | Tier 1 | not started |
+| 1. Spaces (workspaces) | Tier 1 | **shipped** (`Fork/Spaces.swift`) |
+| 2. Profiles per space | Tier 1 | **shipped** (space context menu › Profile) |
+| 3. Split view (2–4 panes) | Tier 1 | **shipped**, 2 panes (`Fork/Split.swift`, ⌘⇧D) |
+| 4. Command bar | Tier 1 | **shipped** (`Fork/CommandBar.swift`, ⌘K) |
 | 5. Folders in the sidebar | Tier 2 | not started |
 | 6. Auto-archive | Tier 2 | not started |
 | 7. Little Arc | Tier 2 | not started |
@@ -28,7 +28,7 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | 10. Boosts (per-site CSS/JS) | Tier 2 | not started |
 | 11. Space colour theming | Tier 3 | not started |
 | 12. Pinned tab favicons + reset to pinned URL | Tier 3 | not started |
-| 13. Tab search across spaces | Tier 3 | not started |
+| 13. Tab search across spaces | Tier 3 | **shipped** with the command bar (⌘K lists other spaces’ pages) |
 | 14. Media controls / now-playing in sidebar | Tier 3 | not started |
 | 15. Downloads tray in sidebar | Tier 3 | not started |
 | 16. Reader mode auto-detect + Ask on page | Tier 3 | not started |
@@ -36,7 +36,7 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | B. Customizability | Part 1b | not started |
 | C. MCP integration (server, then client) | Part 1b | not started |
 | D. Sidebar widgets | Part 1b | not started |
-| Maintenance automation (sync workflows, PATCHES.md, release) | Part 2 | not started |
+| Maintenance automation (sync workflows, PATCHES.md, release) | Part 2 | **partly shipped**: `PATCHES.md`, updater off, Copper bundle id, `sync-main.yml` + `sync-fork.yml` (Layers 1–2). Left: agent conflict step (Layer 3, wait for the first conflict), release-on-tag |
 
 ## How to help / coordinate
 
