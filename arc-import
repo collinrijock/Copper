@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Bring Arc's sidebar into Copper: every space, its colour, its pinned tabs
+and folders' tabs, and whatever was left open.
+
+    ./arc-import              write ~/Library/Application Support/Copper/session.json
+    ./arc-import --world W    write into the test world "Copper (W)" instead
+    ./arc-import --dry        print what would be written
+
+Arc's favourites become the pin grid. Copper has no folders yet (FORK-PLAN
+#5), so a space's pinned tabs and its folders' tabs land flat in the loose
+row, in order, then whatever was left open. Arc documents and easels are skipped. Quit
+Copper first: it writes the session on quit and would overwrite this.
+"""
+
+import colorsys
+import json
+import os
+import sys
+import uuid
+
+ARC = os.path.expanduser("~/Library/Application Support/Arc/StorableSidebar.json")
+
+
+def hue(theme):
+    """The first saturated colour in Arc's theme blob, as a hue 0…1."""
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if {"red", "green", "blue"} <= node.keys() and node.get("alpha", 1) > 0:
+                r, g, b = (min(1, max(0, node[k])) for k in ("red", "green", "blue"))
+                h, s, v = colorsys.rgb_to_hsv(r, g, b)
+                if s > 0.25 and v > 0.2:
+                    found.append(h)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(theme.get("primaryColorPalette") or theme)
+    return round(found[0], 3) if found else None
+
+
+def main(argv):
+    dry = "--dry" in argv
+    world = argv[argv.index("--world") + 1] if "--world" in argv else None
+    name = f"Copper ({world})" if world else "Copper"
+    out = os.path.expanduser(f"~/Library/Application Support/{name}/session.json")
+
+    sidebar = json.load(open(ARC))["sidebar"]["containers"]
+    container = next(c for c in sidebar if isinstance(c, dict) and "spaces" in c)
+    items = {i["id"]: i for i in container["items"] if isinstance(i, dict)}
+    arc_spaces = [s for s in container["spaces"] if isinstance(s, dict)]
+
+    def tabs(parent_id):
+        """Every tab under a container, folders and splits flattened."""
+        for cid in items.get(parent_id, {}).get("childrenIds", []):
+            node = items.get(cid)
+            if not node:
+                continue
+            data = node.get("data", {})
+            if "tab" in data:
+                url = data["tab"].get("savedURL", "")
+                if url.startswith("http"):
+                    yield node.get("title") or data["tab"].get("savedTitle") or "", url
+            elif "list" in data or "splitView" in data:
+                yield from tabs(cid)
+
+    # Favourites — the grid at the top of every space of the default profile.
+    tops = container["topAppsContainerIDs"]
+    favourites = []
+    for profile, tid in zip(tops[::2], tops[1::2]):
+        if profile == {"default": True}:
+            favourites = list(tabs(tid))
+
+    spaces, entries = [], []
+    for s in arc_spaces:
+        sid = str(uuid.uuid4()).upper()
+        space = {"id": sid, "name": s["title"]}
+        h = hue(s.get("customInfo", {}).get("windowTheme", {}))
+        if h is not None:
+            space["hue"] = h
+        spaces.append(space)
+
+        ids = s["containerIDs"]
+        pinned = ids[ids.index("pinned") + 1]
+        unpinned = ids[ids.index("unpinned") + 1]
+        # Arc's favourites grid is Copper's pin grid; Arc's per-space pinned
+        # tabs have titles, so they are loose tabs here, followed by what was
+        # left open.
+        for title, url in favourites:
+            host = url.split("/")[2].replace("www.", "")
+            entries.append({"url": url, "title": title, "pin": host[:1].upper() or "•", "space": sid})
+        row = list(tabs(pinned)) + list(tabs(unpinned))
+        for i, (title, url) in enumerate(row):
+            entries.append({"url": url, "title": title, "space": sid, **({"active": True} if i == 0 else {})})
+
+    current = next((sp["id"] for sp in spaces if sp["name"] == "Exowatt"), spaces[0]["id"])
+    shape = {"tabs": entries, "active": 0, "spaces": spaces, "space": current}
+
+    for sp in spaces:
+        n = sum(1 for e in entries if e["space"] == sp["id"])
+        p = sum(1 for e in entries if e["space"] == sp["id"] and "pin" in e)
+        print(f"{sp['name']:22} {n:4} tabs ({p} pinned)  hue={sp.get('hue')}")
+    if dry:
+        return
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    json.dump(shape, open(out, "w"))
+    print(f"wrote {out}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
