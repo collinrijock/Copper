@@ -11,6 +11,7 @@ enum Session {
         var pin: String?
         var space: UUID? = nil
         var active: Bool? = nil
+        var group: UUID? = nil // Fork: tab groups
     }
 
     struct Shape: Codable {

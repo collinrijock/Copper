@@ -134,7 +134,7 @@ struct SideBar: View {
         let pinRows = pins == 0 ? 0 : (pins + cols - 1) / cols
         let pinBlock = pinRows == 0 ? 0
             : CGFloat(pinRows) * pinHeight + CGFloat(pinRows - 1) * SideBar.pinGap + 10
-        let loose = CGFloat(browser.tabs.count - pins) * (SideBar.row + SideBar.gap)
+        let loose = CGFloat(browser.tabs.count - pins + GroupedRows.extraRows(in: browser.tabs)) * (SideBar.row + SideBar.gap)
         return Metrics.strip + pinBlock + loose + SideBar.row + 8
     }
 
@@ -267,6 +267,10 @@ struct SideBar: View {
     // MARK: - the rows
 
     private var loose: some View {
+        GroupedRows(browser: browser, prefs: prefs, pill: pill) // Fork: groups (was the VStack below)
+    }
+
+    private var looseUngrouped: some View {
         VStack(spacing: SideBar.gap) {
             // See the grid: the drag is measured in the column's space, not
             // the row's, so a row that has just moved keeps its bearings.
@@ -394,7 +398,7 @@ private struct PinSquare: View {
 }
 
 /// One tab, as a line in the column.
-private struct SideRow: View {
+struct SideRow: View { // Fork: was private; GroupedRows draws it
     @ObservedObject var browser: Browser
     @ObservedObject var prefs: Preferences
     @ObservedObject var tab: Tab

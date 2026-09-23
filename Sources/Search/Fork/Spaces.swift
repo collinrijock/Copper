@@ -150,6 +150,7 @@ final class Spaces: ObservableObject {
             for tab in tabs {
                 guard var entry = Session.Entry(tab) else { continue }
                 entry.space = id
+                entry.group = Groups.shared.membership[tab.id]
                 entry.active = tab.id == activeID ? true : nil
                 if visible, entry.active == true { activeIndex = entries.count }
                 entries.append(entry)
@@ -175,6 +176,7 @@ final class Spaces: ObservableObject {
             browser.prepare(tab)
             tab.restore(url: url, title: entry.title)
             tab.pin = entry.pin
+            Groups.shared.restore(tab, group: entry.group)
             var row = rows[id] ?? ([], nil)
             row.tabs.append(tab)
             // Upstream's file has no `active` flag — its `active` index does.
@@ -316,6 +318,9 @@ struct ForkCommands: Commands {
                     .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: [.control])
             }
         }
+        // The Groups menu lives in GroupsUI.swift; it rides here because
+        // App.swift's .commands builder is at its cap of ten.
+        GroupCommands(browser: browser)
     }
 }
 
