@@ -1,6 +1,6 @@
-// The app's icon: a plate of weathered copper (plate.jpg, the face of a
-// half-oxidised copper block — warm metal on top, verdigris creeping up from
-// the bottom) clipped to Apple's rounded square. Drice's Subtract.svg mark is
+// The app's icon: a plate of weathered copper (plate.jpg, a macro of
+// polished copper with a river of azurite and malachite oxidation cutting
+// across it) clipped to Apple's rounded square. Drice's Subtract.svg mark is
 // kept below as a vector in case it is wanted on the plate again.
 
 import AppKit
