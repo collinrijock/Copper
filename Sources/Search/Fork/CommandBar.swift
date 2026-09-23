@@ -81,10 +81,13 @@ enum CommandBar {
             guard let url = tab.address, hit(tab.title, Address.pretty(url)) else { continue }
             var row = Suggestion(key: tab.title.isEmpty ? Address.pretty(url) : tab.title, title: Address.pretty(url), url: url, kind: .open)
             row.tab = tab.id
-            // A page open somewhere else says where, on the right, in place
-            // of "Switch to Tab" — which space it is in is the only thing
-            // about the row you don't already know.
-            row.hint = "· " + short(Spaces.shared.name(of: tab))
+            // Which space it is in is the one thing about this row you
+            // cannot work out from the rest of it, so it goes in the quiet
+            // text beside the title, where it is readable on every row — the
+            // hint on the right only shows on the row Return would take.
+            let where_ = short(Spaces.shared.name(of: tab))
+            let host = shortDetail(row)
+            row.detail = host.isEmpty ? "· \(where_)" : "\(host) · \(where_)"
             elsewhere.append(row)
             if elsewhere.count == 2 { break }
         }
@@ -166,13 +169,8 @@ enum CommandBar {
                 }
             }
             var row = row
-            // A row that arrived with a hint has been dressed already — a
-            // page in another space says which space, and does not also need
-            // to say its host.
-            if row.hint.isEmpty {
-                row.detail = shortDetail(row)
-                row.hint = hint(for: row)
-            }
+            if row.detail.isEmpty { row.detail = shortDetail(row) }
+            row.hint = hint(for: row)
             out.append(row)
             if out.count == limit { break }
         }

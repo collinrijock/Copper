@@ -29,6 +29,8 @@ struct CommandPalette: View {
     private static let drop: CGFloat = 0.3
 
     @State private var place = WindowRuler.Place()
+    /// The site marks, arriving a moment after the rows they belong to.
+    @ObservedObject private var icons = HostIcons.shared
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -49,6 +51,10 @@ struct CommandPalette: View {
         }
         .background(WindowRuler { place = $0 })
         .animation(Motion.settle, value: browser.offers)
+        // Every row that names a site wants that site's mark, and most of
+        // these rows have no page behind them to ask. See Fork/HostIcons.
+        .onAppear { icons.want(browser.offers.map(\.url)) }
+        .onChange(of: browser.offers) { _, offers in icons.want(offers.map(\.url)) }
     }
 
     /// Where to put the top of the card, counted from the top of the region
@@ -106,7 +112,7 @@ struct CommandPalette: View {
     private var rows: some View {
         VStack(spacing: 1) {
             ForEach(Array(browser.offers.enumerated()), id: \.offset) { index, offer in
-                Row(offer: offer, picked: browser.picked == index, tint: tint)
+                Row(offer: offer, picked: browser.picked == index, tint: tint, stamp: icons.landed)
                     .contentShape(Rectangle())
                     .onTapGesture { browser.take(offer) }
             }
@@ -122,12 +128,15 @@ struct CommandPalette: View {
         let offer: Suggestion
         let picked: Bool
         let tint: Color
+        /// Changes when a site mark lands, which is the only thing that can
+        /// make a row draw differently without the row itself changing.
+        let stamp: Int
 
         @State private var hovering = false
 
         var body: some View {
             HStack(spacing: 11) {
-                Mark(offer: offer, tint: tint, picked: picked)
+                Mark(offer: offer, tint: tint, picked: picked, stamp: stamp)
                     .frame(width: 18, height: 18)
 
                 Text(offer.key)
@@ -152,12 +161,17 @@ struct CommandPalette: View {
 
                 Spacer(minLength: 14)
 
-                if !offer.hint.isEmpty {
+                // Only on the row Return would take. "Switch to Tab" set
+                // down the right of six rows is a column of grey noise that
+                // says the same thing six times; on one row it is an answer
+                // to the only question anyone is asking of this card.
+                if !offer.hint.isEmpty, picked || hovering {
                     Text(offer.hint)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(picked ? tint : Palette.muted.opacity(0.8))
                         .lineLimit(1)
                         .fixedSize()
+                        .transition(.opacity)
                 }
             }
             .padding(.horizontal, 12)
@@ -173,6 +187,7 @@ struct CommandPalette: View {
             }
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
+            .animation(Motion.quick, value: picked)
         }
     }
 
@@ -183,6 +198,7 @@ struct CommandPalette: View {
         let offer: Suggestion
         let tint: Color
         let picked: Bool
+        let stamp: Int
 
         var body: some View {
             switch offer.kind {
@@ -191,13 +207,14 @@ struct CommandPalette: View {
             case .search:
                 glyph("magnifyingglass")
             default:
-                if let host = offer.url.host(), let icon = Favicons.shared.cached(host) {
+                if let host = HostIcons.key(for: offer.url), let icon = Favicons.shared.cached(host) {
                     Image(nsImage: icon)
                         .resizable()
                         .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 16, height: 16)
                         .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                        .transition(.opacity)
                 } else {
                     letter
                 }
