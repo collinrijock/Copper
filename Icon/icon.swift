@@ -1,13 +1,18 @@
-// The app's icon, drawn rather than exported: the mark is Drice's
-// Subtract.svg, read from its own path data rather than loaded as an image,
-// so it stays a crisp vector at every size instead of a raster scaled up.
-// The icon puts it on a plate — a Dock icon has to be an opaque square
-// whether the logo itself wants a background or not.
+// The app's icon: a plate of weathered copper (plate.jpg, the face of a
+// half-oxidised copper block — warm metal on top, verdigris creeping up from
+// the bottom) clipped to Apple's rounded square. Drice's Subtract.svg mark is
+// kept below as a vector in case it is wanted on the plate again.
 
 import AppKit
 
 let out = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "AppIcon.iconset")
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+
+let here = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+guard let plateImage = NSImage(contentsOf: here.appendingPathComponent("plate.jpg")) else {
+    FileHandle.standardError.write("icon.swift: Icon/plate.jpg missing\n".data(using: .utf8)!)
+    exit(1)
+}
 
 /// Drice's Subtract.svg (22 September 2026): a pill with an S cut out of it,
 /// on its own 608 × 276 canvas. The same path is in Design.swift's
@@ -98,15 +103,17 @@ func draw(_ size: CGFloat) -> NSImage {
     shadow.shadowBlurRadius = 24 * s
     shadow.shadowOffset = NSSize(width: 0, height: -10 * s)
     shadow.set()
-    NSColor.white.setFill()
+    NSColor.black.setFill()
     shape.fill()
     NSGraphicsContext.restoreGraphicsState()
 
-    // The mark, black on the plate, at the proportion of Drice's search.jpg
-    // (22 September 2026): 607 of a 1000-wide canvas, which on a plate that
-    // is 824 of 1024 comes to three quarters of the plate.
-    NSColor(red: 0.09, green: 0.09, blue: 0.09, alpha: 1).setFill()
-    markPath(in: plate, fraction: 0.754).fill()
+    // The copper face, clipped to the plate.
+    NSGraphicsContext.saveGraphicsState()
+    shape.addClip()
+    NSGraphicsContext.current?.imageInterpolation = .high
+    plateImage.draw(in: plate, from: .zero, operation: .sourceOver, fraction: 1)
+    NSGraphicsContext.restoreGraphicsState()
+    _ = markPath  // vector mark kept; overlay with markPath(in: plate, fraction: 0.754).fill() if wanted
     return image
 }
 
