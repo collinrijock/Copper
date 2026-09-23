@@ -87,6 +87,13 @@ start asleep; `select ID` wakes one.
 Window shots come from inside the app (`bench window`), so they work with
 other windows in front. Put screenshots in `.gauntlet/shots/<piece>-r<round>-<what>.png`.
 
+**Quit what you launched.** `.gauntlet/stop.sh WORLD` quits the Copper that
+`run.sh` started for that world. Every builder, critic and smoother runs it as
+the last thing in their round — the critic relaunches with `run.sh` anyway, so
+nothing is gained by leaving one up, and a dozen idle browsers slow the Mac
+for everyone. `stop.sh all` sweeps every gauntlet instance. Never quit the
+user's own Copper (the one without `SEARCH_PROBE`, on the live profile).
+
 Copper's own hotkeys: ⌘K command bar, ⌃1–9 spaces, ⌃N new space, ⌘⇧D split.
 `osascript` cannot send keystrokes on this Mac; drive everything through the
 bench.
@@ -123,6 +130,16 @@ build must pass):
 - **Space swipe** (`Fork/Swipes.swift`): two fingers sideways over the sidebar steps
   spaces. `./bench swipe left|right|down`.
 
+**Sections piece (new).** Arc's sidebar is three sections and Copper's must be
+the same three, for real: **Favourites** (the pin grid), **Saved** (Arc's pinned
+tabs — an explicit persisted `Entry.saved` flag, not "whatever was restored"),
+and **Today** (everything else, under the hairline + New Tab row, auto-archived
+after 24h — 12h/24h/48h/never in Settings — through the normal close path so it
+lands in reopen-closed-tabs). Drag across the seam / context menu / `bench
+sections save|unsave ID` move a tab between the two; `sections archive` runs the
+sweep now. arc-import marks Arc pinned as saved and gives Today tabs their real
+`timeLastActiveAt`. Groups (folders) live in Saved.
+
 **Folders piece — new scope.** Do **not** build a `Folder` model or touch `Session`.
 Copper's folders *are* Felipe's groups; make them render like Arc folders:
 - Nesting from the ` › ` names: a group whose name starts with another group's name
@@ -135,8 +152,8 @@ Copper's folders *are* Felipe's groups; make them render like Arc folders:
   all) and tab (Group ›) — keep them; add **New Folder Inside** on a header, which
   creates a group named `<parent> › <name>`.
 - Bench: add `groups toggle NAME` (collapse/expand) so the critic can open one.
-- Start your worktree from `gauntlet/sidebar` **merged with `fork`**
-  (`git worktree add -B gauntlet/folders <path> gauntlet/sidebar && git merge fork`).
+- Your worktree branches from `gauntlet/sections` (which contains the sidebar piece
+  and `fork`).
   Style must match the sidebar piece; do not restyle the sidebar itself.
 
 **Sidebar piece**: after merging `fork`, `Side.swift` gains `GroupedRows`; keep it

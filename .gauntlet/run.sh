@@ -8,14 +8,13 @@
 # world (so a builder's session-format change is exercised every time),
 # launches the binary directly (several checkouts can run at once), waits
 # for the bench socket, dismisses the welcome, sizes the window, lands on
-# the Exowatt space.
+# the Exowatt space. `stop.sh WORLD` quits it again — always do that when done.
 set -euo pipefail
 WORLD="$1"
 ROOT="$(cd "${2:-$(dirname "$0")/..}" && pwd)"
 cd "$ROOT"
 
-pkill -f "SEARCH_PROBE=$WORLD " 2>/dev/null || true
-pkill -f "$ROOT/build/Copper.app/Contents/MacOS/Copper" 2>/dev/null || true
+"$(dirname "$0")/stop.sh" "$WORLD"
 sleep 0.5
 
 ./build.sh debug app 2>&1 | grep -E "error:|built:" || true
@@ -26,6 +25,7 @@ defaults write "com.officecommun.search.test.$WORLD" sidebar -bool true
 ./arc-import --world "$WORLD" | tail -1
 
 SEARCH_PROBE="$WORLD" nohup build/Copper.app/Contents/MacOS/Copper >"/tmp/copper-$WORLD.log" 2>&1 &
+echo $! > "/tmp/copper-$WORLD.pid"
 for _ in $(seq 1 40); do
     sleep 0.5
     ./bench --world "$WORLD" probe >/dev/null 2>&1 && break
