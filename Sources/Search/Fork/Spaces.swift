@@ -27,13 +27,6 @@ final class Spaces: ObservableObject {
     @Published private(set) var all: [Space]
     @Published private(set) var current: UUID
 
-    /// The rows that came back from the last session. Arc splits its column
-    /// into the tabs you keep and the tabs you opened today; Copper's session
-    /// file has no flag for that, but everything restored at launch *is*
-    /// what you kept, and everything opened since is today's. The column
-    /// draws the New Tab row on that seam.
-    @Published private(set) var carried: Set<Tab.ID> = []
-
     /// The rows not on screen, by space.
     private var parked: [UUID: (tabs: [Tab], active: Tab.ID?)] = [:]
     var parkedTabs: [Tab] { parked.values.flatMap(\.tabs) }
@@ -61,6 +54,9 @@ final class Spaces: ObservableObject {
             browser.activeID = nil
             browser.select(active)
         }
+        // A row is only ever swept while it is the one on screen, so the
+        // archive never runs on a space behind your back. (Fork: sections)
+        Sections.shared.sweep(in: browser)
     }
 
     func step(_ by: Int, in browser: Browser) {
@@ -158,6 +154,8 @@ final class Spaces: ObservableObject {
                 guard var entry = Session.Entry(tab) else { continue }
                 entry.space = id
                 entry.group = Groups.shared.membership[tab.id]
+                entry.saved = tab.pin == nil ? Sections.shared.isSaved(tab) : nil
+                entry.seen = Sections.shared.lastSeen(tab).timeIntervalSince1970
                 entry.active = tab.id == activeID ? true : nil
                 if visible, entry.active == true { activeIndex = entries.count }
                 entries.append(entry)
@@ -176,7 +174,7 @@ final class Spaces: ObservableObject {
             current = saved.space.flatMap { c in spaces.first { $0.id == c }?.id } ?? spaces[0].id
         }
         var rows: [UUID: (tabs: [Tab], active: Tab.ID?)] = [:]
-        carried = []
+        Sections.shared.clear()
         for (i, entry) in saved.tabs.enumerated() {
             guard let url = URL(string: entry.url) else { continue }
             let id = entry.space.flatMap { s in all.first { $0.id == s }?.id } ?? current
@@ -184,7 +182,9 @@ final class Spaces: ObservableObject {
             browser.prepare(tab)
             tab.restore(url: url, title: entry.title)
             tab.pin = entry.pin
-            carried.insert(tab.id)
+            // No flag at all is an upstream-shaped file: everything in it is
+            // something you kept, so the whole column comes back as Saved.
+            Sections.shared.restore(tab, saved: entry.saved ?? true, seen: entry.seen)
             Groups.shared.restore(tab, group: entry.group)
             var row = rows[id] ?? ([], nil)
             row.tabs.append(tab)
@@ -195,9 +195,11 @@ final class Spaces: ObservableObject {
         let mine = rows.removeValue(forKey: current) ?? ([], nil)
         parked = rows
         browser.tabs = mine.tabs
+        Sections.shared.begin(in: browser) // Fork: the archive sweep, at launch and every half hour
         guard let first = mine.tabs.first else { return }
         let active = mine.tabs.first { $0.id == mine.active } ?? first
         browser.activeID = active.id
+        Sections.shared.note(active.id)
         _ = active.wake()
     }
 }

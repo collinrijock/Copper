@@ -15,6 +15,7 @@ struct SideBar: View {
     @ObservedObject var browser: Browser
     @ObservedObject var prefs: Preferences
     @ObservedObject private var spaces = Spaces.shared
+    @ObservedObject private var sections = Sections.shared
 
     @Environment(\.colorScheme) private var scheme
 
@@ -56,7 +57,7 @@ struct SideBar: View {
                     .padding(.bottom, 10)
             }
 
-            carried
+            saved
             divider
             newTab
             today
@@ -77,6 +78,9 @@ struct SideBar: View {
         // asked their sites for a mark. Ask, once per host per launch, and
         // again when a switch brings a whole new column into view.
         .task(id: spaces.current) { Marks.warm(browser.tabs) }
+        // A row nobody has met is today's, and goes to the top of Today.
+        .onChange(of: browser.tabs.map(\.id)) { _, _ in sections.arrived(in: browser) }
+        .onChange(of: browser.activeID) { _, now in sections.note(now) }
         .animation(Motion.quick, value: landing)
         .animation(Motion.glide, value: browser.activeID)
         .animation(Motion.glide, value: browser.editingTab)
@@ -240,23 +244,40 @@ struct SideBar: View {
 
     // MARK: - the rows
 
-    /// Everything that came back from the last session — Arc's pinned tabs.
+    /// The tabs you keep — Arc's pinned section, and the folders with them.
     /// This is the long block, and the only one that scrolls without limit.
-    private var carried: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            rows(looseRows.filter { spaces.carried.contains($0.tab.id) })
-                .padding(.horizontal, SideBar.inset)
-                .padding(.bottom, 2)
+    private var saved: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                rows(looseRows.filter { sections.isSaved($0.tab) })
+                    .padding(.horizontal, SideBar.inset)
+                    .padding(.bottom, 2)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            // The block's own height and soft edges belong inside the reader:
+            // a scrollTo from outside one leaves the favourites' lazy grid
+            // above it blank until something else forces a redraw.
+            .frame(maxHeight: .infinity)
+            .mask(SideBar.fade)
+            // A row saved from far down Today lands at the bottom of a block
+            // that may be scrolled well above it. Go and show it.
+            // — once the row has finished moving there, and without an
+            // animation of its own: a scroll that overlaps the move's leaves
+            // the grid above blank until the next redraw.
+            .onChange(of: sections.reveal) { _, id in
+                guard let id else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    proxy.scrollTo("tab-\(id.uuidString)", anchor: .bottom)
+                }
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: .infinity)
-        .mask(SideBar.fade)
     }
 
-    /// Whatever was opened since. Sits under the New Tab row, the way Arc's
-    /// today does, and takes only as much of the column as it needs.
+    /// Everything else, newest first. Sits under the New Tab row, the way
+    /// Arc's today does, and takes only as much of the column as it needs.
     private var today: some View {
-        let list = looseRows.filter { !spaces.carried.contains($0.tab.id) }
+        let list = looseRows.filter { !sections.isSaved($0.tab) }
         let wanted = CGFloat(list.count + GroupedRows.extraRows(in: list.map(\.tab))) * (SideBar.row + SideBar.gap)
         return ScrollView(.vertical, showsIndicators: false) {
             rows(list)
@@ -269,8 +290,22 @@ struct SideBar: View {
 
     /// One block's rows, drawn by the groups' view so each run wears its
     /// header and the drag knows about groups; `only` keeps it to this block.
+    /// A row pulled a clear step out of its block crosses the seam: up out of
+    /// Today saves it, down out of Saved lets it go.
     private func rows(_ list: [(index: Int, tab: Tab)]) -> some View {
-        GroupedRows(browser: browser, prefs: prefs, pill: pill, tint: tint, only: Set(list.map(\.tab.id)))
+        GroupedRows(
+            browser: browser,
+            prefs: prefs,
+            pill: pill,
+            tint: tint,
+            only: Set(list.map(\.tab.id)),
+            offset: list.first?.index ?? 0,
+            crossed: { tab, way in
+                let wanted = way < 0
+                guard sections.isSaved(tab) != wanted else { return }
+                withAnimation(Motion.settle) { sections.set(tab, saved: wanted, in: browser) }
+            }
+        )
     }
 
     /// A long column runs out under a soft edge rather than a hard one — the
@@ -289,8 +324,9 @@ struct SideBar: View {
         )
     }
 
-    /// The quiet line between what was carried over and what was opened
-    /// today. Half a hairline, inset from both edges, and nothing else.
+    /// The quiet line between what you keep and what you opened today. Half
+    /// a hairline, inset from both edges, and nothing else — Arc captions
+    /// neither block, and a column this quiet is worse for a word in it.
     private var divider: some View {
         Rectangle()
             .fill(tint.hairline)

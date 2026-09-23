@@ -13,9 +13,15 @@ struct GroupedRows: View {
     @ObservedObject var grouper = Grouper.shared
     let pill: Namespace.ID
     let tint: SpaceTint
-    /// The sidebar draws the loose list as two blocks (carried over, today);
-    /// each hands in the ids it owns and this draws only those.
+    /// The sidebar draws the loose list as two blocks (Saved, Today); each
+    /// hands in the ids it owns and this draws only those.
     var only: Set<Tab.ID>? = nil
+    /// Where this block starts in the whole loose list, so a drag inside it
+    /// moves the tab to the right place in the row and not to the row's top.
+    var offset = 0
+    /// A row let go a clear step past the block's top (-1) or bottom (+1):
+    /// the sidebar reads that as crossing the seam between Saved and Today.
+    var crossed: ((Tab, Int) -> Void)? = nil
 
     @State private var dragging: Tab.ID?
     @State private var from = 0
@@ -143,16 +149,21 @@ struct GroupedRows: View {
                 let target = min(max(0, from + moved), loose.count - 1)
                 if target != index {
                     withAnimation(Motion.settle) {
-                        browser.move(tab, to: target + browser.pinnedCount)
+                        browser.move(tab, to: offset + target + browser.pinnedCount)
                     }
                 }
             }
             .onEnded { _ in
+                // A whole row past the block's own end, not just over its
+                // last line: the seam is crossed on purpose or not at all.
+                let wanted = from + Int((travel / step).rounded())
                 withAnimation(Motion.settle) {
                     dragging = nil
                     travel = 0
                 }
-                groups.settle(tab, in: browser)
+                if wanted < -1 { crossed?(tab, -1) }
+                else if wanted > loose.count { crossed?(tab, 1) }
+                else { groups.settle(tab, in: browser) }
             }
     }
 }
