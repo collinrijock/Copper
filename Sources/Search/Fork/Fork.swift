@@ -61,6 +61,7 @@ enum Fork {
             if request["go"] as? Bool == true, !browser.offers.isEmpty { browser.picked = 0; browser.submit() }
             else { browser.editing = false; browser.typed = "" }
             return ["offers": rows]
+        case "swipe": return SpaceSwipe.bench(request["arg"] as? String ?? "left", in: browser)
         case "summon":
             // ⌘K left open with this text in it, for a look at the bar itself.
             browser.summon()
