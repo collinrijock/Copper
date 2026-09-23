@@ -119,69 +119,219 @@ All `Codable`, all optional fields so upstream's writer stays readable by the fo
 
 ---
 
+
+---
+
+## Part 1b — beyond Arc: aesthetic, customizability, MCP, sidebar widgets
+
+Four workstreams the upstream will never do. Each is a new file (or two) plus one hook; see Part 2 for why that matters.
+
+### A. Apple aesthetic (Liquid Glass, macOS 26)
+
+**What Apple says (Adopting Liquid Glass, HIG › Materials, WWDC25 219):** glass is for the *navigation/control layer*, never the content layer. Sidebars float over content; content extends underneath (`backgroundExtensionEffect()`). Use system `NavigationSplitView`/toolbar first; use `.glassEffect()` only on prominent custom controls; group neighbours in `GlassEffectContainer` so they merge/morph; never glass over the web view.
+
+**Current state:** `Design.swift` is a flat greyscale `Palette` (`pair(light, dark)`), `Side.swift` paints `Palette.ground` as an opaque background, the window is `.hiddenTitleBar` with hand-drawn traffic lights. Good bones — colour is already centralised.
+
+**Plan (in order):**
+1. **Sidebar as floating glass.** `Side.swift:84` `.background(Palette.ground)` → on macOS 26 `.glassEffect(.regular, in: .rect(cornerRadius: 12))` with 8pt inset from the window edge; `Stage` extends under it via `.backgroundExtensionEffect()`. `#available(macOS 26, *)` fallback = `Material.sidebar` (`.background(.ultraThinMaterial)`) on 14/15. ~30 lines, one file.
+2. **Omnibox as a glass capsule.** The address field (`Omnibox.swift`) floats over the page top when editing: `GlassEffectContainer { field; suggestions }` so they morph into one shape. ~40 lines.
+3. **Tab rows.** Selected-tab `wash` → `.glassEffect(.regular.tint(space.tint.opacity(0.3)).interactive())`. Hover uses the same with lower opacity. ~20 lines in `Side.swift`/`TabBar.swift`.
+4. **Motion.** Adopt `.animation(.smooth)` / `.spring(duration: 0.25)` on tab reorder + space switch; use `matchedGeometryEffect` for the sliding selection ("the grey slides") which already exists conceptually.
+5. **SF Symbols everywhere** (`Icons.swift` already exists) with `.symbolEffect(.bounce)` on state changes (download done, pin added).
+6. **Vibrancy for text** on glass: `.foregroundStyle(.primary/.secondary)` instead of fixed `Palette.ink/muted` so it stays legible on tinted glass. Do this by making `Palette` return semantic colours when glass is on.
+7. **Respect Reduce Transparency / Increase Contrast** — system handles it if you use system materials; test both.
+
+Ceiling: glass requires macOS 26 SDK → Xcode 26 in `build.sh`; keep `Package.swift` platform at `.v14` and gate with `#available`.
+
+### B. Customizability
+
+Arc has almost none; Vivaldi/Zen have too much. Aim: **one JSON file + one Settings pane**, no plugin system.
+
+1. **Theme file.** `Palette` becomes `Theme: Codable { ground, ink, muted, faint, hairline, wash, hover, accent, radius, glass: Bool, font: String? }` loaded from `Store.file("theme.json")`, defaulting to today's values. `Design.swift` reads `Theme.current`. Settings › Appearance gets colour wells + "Export/Import theme". Space tints (Part 1 #11) override `accent`. ~120 lines.
+2. **Layout knobs** in `Prefs`: sidebar width, tab density (compact/comfortable), show favicons vs letters, pin grid columns, glass on/off, toolbar items. All `@AppStorage` on `Store.settings` (already the pattern in `Prefs.swift`). ~60 lines.
+3. **Keyboard remap.** `Shortcuts.json: [command: keyEquivalent]`; `App.swift` `.commands` reads `Shortcut.for("newTab")` instead of literal `"t"`. Settings › Keyboard = table. ~80 lines.
+4. **Custom CSS for the browser UI itself** — skip; SwiftUI can't be styled by CSS, and the theme file covers 90%. Say no.
+5. **Per-site boosts** (Part 1 #10) cover page-side customisation.
+6. **New-tab page** = the widget board (see D) — no separate "start page" concept.
+
+### C. MCP integration
+
+Two directions; do the server first, it is the one nothing else provides on WebKit.
+
+#### C1. Search as an MCP **server** (agents drive the browser)
+Chrome DevTools MCP and Playwright MCP exist for Chromium; nothing for a WebKit browser with your real sessions/cookies. That is the differentiator: Claude Code / phi drive *your* logged-in browser.
+
+- **SDK:** `modelcontextprotocol/swift-sdk` (0.11.x, spec 2025-11-25). Upstream forbids deps; the fork allows exactly this one — record it in the patch manifest (Part 2). Alternative with zero deps: hand-write JSON-RPC over stdio (~300 lines) — not worth it; take the dep.
+- **Transport:** in-app **Streamable HTTP** on `127.0.0.1:<port>` via `StatelessHTTPServerTransport` bridged to a tiny `Network.framework` `NWListener` (no Vapor). Bearer token generated at first launch, stored in keychain via existing `Vault`, shown in Settings › MCP with a "Copy config for Claude Code / phi" button. Also ship `search --mcp-stdio` (a `CommandLine.arguments` check in `App.swift` that runs the server against a hidden window) for clients that only speak stdio.
+- **Tool surface** (mirror Playwright MCP names so agent skills written for it transfer):
+
+  | Tool | Impl |
+  |---|---|
+  | `browser_tabs` (list/select/new/close) | `Browser.tabs`, `select`, `newTab`, `close` |
+  | `browser_navigate`, `browser_navigate_back` | `tab.web.load` / `goBack` |
+  | `browser_snapshot` | inject a11y-tree script → JSON with `ref` ids (reuse the ref→selector map for click/type) |
+  | `browser_click`, `browser_type`, `browser_fill_form`, `browser_press_key` | `evaluateJavaScript` on the ref'd element |
+  | `browser_evaluate` | `callAsyncJavaScript` |
+  | `browser_take_screenshot` | `takeSnapshot(with:)` → PNG base64 |
+  | `browser_wait_for` | poll `evaluateJavaScript` |
+  | `read_page` (Search-specific) | `Reader.swift` extraction → markdown; cheapest token path |
+  | `browser_console_messages` | `WKScriptMessageHandler` shim capturing `console.*` |
+  | resources: `search://tabs`, `search://history?q=`, `search://bookmarks` | read-only |
+
+- **Safety:** all tools run on `MainActor` via the existing `Browser`; token required; per-call "agent is driving" banner in the sidebar (reuse `announce()`); `private` tabs are never exposed; a setting to require click-to-approve for `browser_evaluate` on hosts in a denylist (banks). Never expose `Vault`.
+- **Files:** `MCP/Server.swift` (tools), `MCP/Snapshot.swift` (a11y script + ref map), `MCP/Listener.swift` (NWListener bridge), Settings pane. ~700 lines total. Hooks into upstream files: one `if CommandLine.arguments.contains("--mcp-stdio")` in `App.swift`, one `Task { await MCP.start() }` at launch.
+
+#### C2. Search as an MCP **client** (an agent in the sidebar)
+- A sidebar widget (see D) hosting a chat with a model that has (a) the C1 tools bound locally — no HTTP round trip — and (b) whatever external MCP servers you configure (`mcp.json`, same shape Claude Code uses, so you paste your existing file).
+- **Model access:** BYO endpoint — `Settings › AI: base URL + key`, OpenAI-compatible or Anthropic messages. Default to Exowatt gateway for you; ship with nothing configured (upstream's privacy stance: nothing leaves the Mac unless you set it up).
+- Swift SDK gives `Client` + `HTTPClientTransport`/`StdioTransport` for the external servers — same dep as C1.
+- Prompt = page context from `read_page` + user text; tool loop until done. ~500 lines. Do after C1 and D ship; it needs both.
+- "Ask on page" from Part 1 #16 collapses into this.
+
+### D. Sidebar widgets
+
+**Constraint (researched):** WidgetKit widgets *cannot* be embedded in your own app — they render in the system's widget surfaces only. ExtensionKit (`EXHostViewController`) can host third-party remote UI but is heavy. So: a home-grown board of two widget kinds, which is what Vivaldi did (native dashboard widgets + Web Panels).
+
+**Model:**
+```swift
+enum WidgetKind: Codable { case web(URL), note, todo, clock, calendar, media, downloads, agent, tabsPreview }
+struct WidgetSpec: Codable, Identifiable { id, kind, height: CGFloat, collapsed: Bool, space: UUID? }
+```
+Persisted in `Store.file("widgets.json")`. `Side.swift` becomes `VStack { pins; tabs; Divider; WidgetBoard }` where `WidgetBoard` is a `ForEach(specs)` of resizable cards, reorderable with `.onMove`/`.draggable` (SwiftUI drag on macOS 14+), each in a `DisclosureGroup`. Widgets can be per-space or global (`space == nil`).
+
+**Widget kinds, ordered by value/cost:**
+1. **Web panel** (Vivaldi Web Panels) — a `Tab` not in `tabs`, rendered with the existing `Page(tab:)` at sidebar width with a mobile UA (`config.applicationNameForUserAgent` = iPhone Safari string). Slack, Todoist, Calendar, ChatGPT, anything. This one widget covers 80% of asks. ~80 lines because `Tab`/`Page` already exist.
+2. **Note** — `TextEditor` bound to a file per widget. ~30 lines.
+3. **Now playing** — `Float.swift` already knows the playing tab; title + play/pause. ~40 lines.
+4. **Downloads** — existing panel data, last 3 rows. ~30 lines.
+5. **Todo** — list of `{text, done}`; ~60 lines.
+6. **Clock / calendar** — `TimelineView(.everyMinute)`; calendar via `EventKit` (needs the Calendars entitlement + a prompt). ~80 lines.
+7. **Agent** — the C2 chat. Ships when C2 does.
+8. **Tabs preview** — thumbnails of the other spaces' tabs (`Tab.cover` snapshots exist for sleep). ~50 lines.
+9. **HTML widgets** — user-authored: a folder in `Application Support/Search/Widgets/<name>/index.html` rendered in a web panel with a tiny `window.search` JS bridge (`tabs.list`, `tabs.open`, `page.text`) via `WKScriptMessageHandler`. This is the "customisable" escape hatch and needs no plugin API design. ~120 lines.
+
+**Layout:** cards use `.glassEffect` on 26 (see A) and `Material` before; height drag handle at the bottom edge; ⌥-click title to collapse; right-click → remove / move to top / per-space toggle. Empty new-tab page shows the same board full-width (B.6).
+
+**Order:** D1 web panel first (unlocks Slack/Calendar immediately), then D2/D3/D4 (trivial), then the board's drag/resize polish, then D9, then D7 with C2.
+
+---
+
 ## Part 2 — keeping the fork in sync with upstream
 
-Upstream is one author, one squashed commit, "Claude Code first-pass review", asks for an issue before a big PR. Expect infrequent, large drops (they'll likely squash 1.1 into one commit again). Plan for that.
+### What the research actually says (and what the dev crowd repeats)
+
+I could not pull raw X/Twitter threads (search returns no post bodies), so this is the consensus from git-scm docs, the kernel maintainer guide, GitHub docs, Zen/Waterfox's setups, and the advice that circulates in dev threads. It boils down to six things:
+
+1. **Never work on the branch that mirrors upstream.** `main` = fast-forward-only mirror. Your work lives elsewhere. Everyone says this; everyone who skips it ends up with a `main` that can't fast-forward and a fork that can't be diffed.
+2. **Treat your changes as a patch stack, not a branch.** The kernel/git-workflows guidance: rebase *private* stacks, merge *shared* history. Keep the stack small, ordered, and explained. Zen Browser does this literally — Zen code lives in `src/zen/`, Firefox edits are exported patch files, an upstream bump is "refresh patches, fix conflicts, test." Waterfox does the opposite (full-tree fork) and pays for it with heavier merges. **Do the Zen thing: new files in your own directory, minimal patches to theirs.**
+3. **Use GitHub's own `merge-upstream` endpoint, not a marketplace action.** `POST /repos/{owner}/{repo}/merge-upstream {branch}` is what the "Sync fork" button calls. It fast-forwards and returns `409` on divergence instead of silently doing something. Third-party "sync fork" actions (wei/pull, aormsby/Fork-Sync…) were the 2020–2023 answer; the recommendation now is the native endpoint, and if you must use an action, pin it to a SHA.
+4. **`git rerere`** — turn it on. Same conflict shape on the next rebase → git replays your resolution. One config line, free.
+5. **`jj` (Jujutsu) if you find yourself rebasing the stack often.** `jj rebase -s <bottom> -d main` moves the whole stack; conflicts are stored in the commits rather than stopping the rebase; change-ids survive rewrites. This is the tool people on X are actually excited about for exactly this job. Optional — git + rerere is enough until the stack passes ~15 patches.
+6. **Let an agent do the mechanical rebase, gated by CI + human review.** The current practice: a scheduled job runs Claude Code / a `rebaser` skill in a worktree, resolves conflicts *in the patch that owns the behaviour* (never "ours"/"theirs" wholesale), builds, and opens a PR. Anthropic's own power-user docs show a recurring `/babysit` that rebases and shepherds PRs. Caveat everyone repeats: don't auto-merge, and don't let it pick sides mechanically. Below is how to wire it for this repo.
+
+Plus the one thing specific to this upstream: the author squashes releases into a single commit. Rebase onto a squashed 1.1 will replay your stack against one giant diff; conflicts concentrate in `Browser.swift`. The Zen-style layout is what keeps that survivable.
 
 ### Branch layout
 ```
 upstream/main   — never touched, fetched only
-main            — mirror of upstream/main (fast-forward only)
-fork            — your release branch = main + feature branches merged
-feat/spaces, feat/split, …   — one branch per Part-1 item, based on main
+main            — mirror of upstream/main (ff-only, synced by the merge-upstream endpoint)
+fork            — release branch = main + the patch stack (rebased while private, merged once shipped)
+feat/<name>     — one branch per Part-1/1b item while it's in progress
 ```
-Build/ship from `fork`. Keep `main` pristine so `git diff main..fork` is always "exactly what the fork adds".
+Build/ship from `fork`. `git diff main..fork` is always "exactly what the fork adds"; `git range-diff` between two rebases shows what the rebase changed.
 
-### Rules that make rebases cheap
-1. **New files over edited files.** Put spaces, split, boosts, little, command list in new `.swift` files. Upstream can't conflict with a file it doesn't have. Only touch `Browser.swift`/`Tab.swift`/`Session.swift` where a hook is unavoidable, and make those hooks one-liners (`extension Browser` in your own file does the work).
-2. **Additive `Codable` fields only, always optional.** Upstream's `Session.Shape` decoder keeps working; yours reads upstream's files.
-3. **Match their style** (why-comments, no deps, no force-unwraps, Swift 5 mode) so any piece can be upstreamed as a PR and then deleted from the fork — that is the cheapest maintenance of all. Candidates upstream would plausibly take: #9 search engine choice, #12 pin URL, #6 auto-archive, #14 media row. Candidates they've said no to: multi-window (#7), so keep that isolated.
-4. **Don't rename their identifiers.** Their naming is idiosyncratic (`ghosts`, `shy`, `veils`, `hunting`). Leave it; conflicts come from touched lines, not taste.
+### Repo layout (Zen-style)
+```
+Sources/Search/           upstream's files — touch as little as possible
+Sources/Search/Fork/      everything yours: Spaces.swift, Split.swift, Widgets/, MCP/, Theme.swift, Little.swift …
+PATCHES.md                the manifest (below)
+```
+SwiftPM compiles everything under `Sources/Search` recursively, so a subfolder costs nothing.
 
-### Sync procedure (run on every upstream change)
+### Rules that keep rebases cheap
+1. **New files over edited files.** Anything upstream doesn't have can't conflict. `extension Browser` / `extension Tab` in your own files reach their internals (same module) without editing theirs.
+2. **Hooks are one-liners.** Where an upstream file must change (`Browser.select`, `Session.Shape`, `App.commands`, `Side.body`), add a single call into your code — `Fork.hook(...)` — not logic.
+3. **Additive optional `Codable` fields only** so `session.json` round-trips both directions.
+4. **Match their style** (why-comments, Swift 5 mode, no force-unwraps) so any patch can be sent upstream and then *deleted* from the stack. Upstreaming is the cheapest maintenance there is.
+5. **Don't rename their identifiers**, don't reformat their files. Conflicts come from touched lines.
+6. **One dependency, documented.** `modelcontextprotocol/swift-sdk` breaks their "no deps" rule; it lives only in `Package.swift` (one conflict-prone line) and `Fork/MCP/`. Never let it leak into upstream files.
+
+### PATCHES.md — the manifest
+One row per patch that touches an upstream file. This is the thing the kernel guide calls "treat the stack as a product."
+```
+| patch | touches | why | upstream status | drop when |
+| spaces-hook | Browser.swift:select, Session.swift:Shape | filter tabs by space | not sent (they'd say no) | never |
+| search-engine | Google.swift | engine picker | PR #NN open | merged |
+| updater-off | Updater.swift | don't self-replace with upstream | fork-only | never |
+```
+Update it in the same commit as the patch. When a row's "drop when" fires, delete the patch and the row.
+
+### Sync procedure (what the automation does, and what you do by hand when it can't)
 ```sh
+git config rerere.enabled true       # once
 git fetch upstream
 git checkout main && git merge --ff-only upstream/main && git push origin main
 git checkout fork
-git rebase main            # or: git merge main  — see below
-swift build 2>&1 | grep -E "error|warning: .*Search/" ; ./build.sh
+git rebase main                      # or: git merge main  — see "rebase vs merge"
+swift build 2>&1 | grep -E "error|warning: .*Sources/Search/" ; ./build.sh
+git range-diff origin/fork...fork    # eyeball what the rebase changed
 git push --force-with-lease origin fork
 ```
-- **Rebase** while the fork is small (Tier 1). History stays linear and `git diff main..fork` is the patch set.
-- **Switch to merge** once `fork` has a release users depend on — force-pushing a shipped branch breaks their `git pull`. Merge commits named `Merge upstream 1.x` are fine.
-- If upstream squashes a release into one giant commit, rebase will replay your commits onto it; conflicts will be concentrated in `Browser.swift`. Resolve by re-applying your hooks, not by keeping your version of the file.
+**Rebase vs merge:** rebase while nobody but you pulls `fork` (linear, diffable, patch-stack semantics). Switch to `git merge main` with a `Merge upstream 1.x` commit the day someone else is on it — force-pushing a shipped branch breaks their pull. Both work with rerere.
 
-### Automate the boring part
-`.github/workflows/upstream.yml` (weekly + manual):
+### Automation
+
+**Layer 1 — mirror `main` (native endpoint, zero third-party code).** `.github/workflows/sync-main.yml`:
 ```yaml
-on: { schedule: [{cron: "0 9 * * 1"}], workflow_dispatch: {} }
+on: { schedule: [{cron: "17 */6 * * *"}], workflow_dispatch: {} }
+permissions: { contents: write }
 jobs:
   sync:
+    runs-on: ubuntu-latest
+    steps:
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh api --method POST "repos/${{ github.repository }}/merge-upstream" -f branch=main
+```
+A `409` here means you accidentally committed to `main`; fix that, not the workflow. Scheduled workflows only fire from the default branch and are disabled on fresh forks — enable Actions once.
+
+**Layer 2 — rebase `fork`, build, open a PR (fails loudly on conflict).** `.github/workflows/sync-fork.yml`, triggered by Layer 1 success:
+```yaml
+on: { workflow_run: { workflows: ["sync"], types: [completed] }, workflow_dispatch: {} }
+permissions: { contents: write, pull-requests: write }
+jobs:
+  rebase:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-        with: { ref: fork, fetch-depth: 0, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: actions/checkout@<sha>
+        with: { ref: fork, fetch-depth: 0 }
       - run: |
-          git remote add upstream https://github.com/driceroland/Search
-          git fetch upstream
-          git checkout main && git merge --ff-only upstream/main && git push origin main
-          git checkout -b sync/upstream-$(date +%F) fork
-          git merge main || { git merge --abort; echo CONFLICT >> $GITHUB_STEP_SUMMARY; exit 1; }
+          git config user.name bot && git config user.email bot@users.noreply.github.com
+          git fetch origin main
+          git checkout -b sync/$(date +%F) fork
+          git rebase origin/main || { echo "::error::conflict — run the agent step or resolve by hand"; exit 1; }
           swift build
           git push origin HEAD
-          gh pr create --base fork --title "Sync upstream $(date +%F)" --body "auto"
-        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+          gh pr create --base fork --title "Sync upstream $(date +%F)" \
+            --body "$(git range-diff origin/fork...HEAD | head -200)"
+        env: { GH_TOKEN: "${{ github.token }}" }
 ```
-Clean merge + green build → a PR to click. Conflict → a failed run telling you to do it by hand. Enable "Allow GitHub Actions to create PRs" in repo settings.
+Green = a PR to click. Red = conflict → Layer 3 or you.
+
+**Layer 3 — agent conflict resolution (opt-in, still PR-gated).** On Layer 2 failure, a job checks out the conflicted rebase in a worktree and runs Claude Code headless with a fixed prompt:
+> Rebase `fork` onto `origin/main` is stopped on a conflict. Read `PATCHES.md`. Resolve each conflict inside the patch that owns the behaviour, preserving both upstream's change and the fork's intent — never take a whole side. Run `swift build`; fix compile errors the same way. Continue the rebase until done. Do not push; do not merge. Write a summary of every resolution to `SYNC-NOTES.md`.
+
+Then the job pushes the branch and opens the PR with `SYNC-NOTES.md` as the body. You review the range-diff, not the code. Needs `ANTHROPIC_API_KEY` (or the Exowatt gateway) in repo secrets and `claude -p` on the runner. Keep `fork` protected so nothing merges without a human. Skip this layer until the first conflict actually happens; two lines of rerere may make it unnecessary.
+
+**Layer 4 — release on tag.** `v1.0-fork.N` tag → `./build.sh release dmg` → GitHub Release with `Search.dmg` + a `VERSION`/appcast file that the fork's `Updater` reads (below).
 
 ### Releasing your build
-- `./build.sh release dmg` gives an ad-hoc-signed `Search.dmg`. Fine for your own Macs (right-click → Open once).
-- **Updater:** `Updater.swift` polls `officecommun.com` and verifies *their* signature. Your fork must either (a) point `Updater` at your own feed (`raw.githubusercontent.com/collinrijock/Search/fork/VERSION` + a GitHub Release asset) and sign with your own Developer ID, or (b) disable it — otherwise a build of the fork will one day replace itself with upstream 1.1 and drop every feature. Do (b) first (one-line early return), (a) when you have a Developer ID.
-- Bundle id: change it (`build.sh`) so the fork and upstream coexist with separate keychain items and `Application Support` folders — otherwise they'll fight over `session.json`. `Store.folder` derives from the bundle; check it.
-- Tag releases `v1.0-fork.1`, `v1.0-fork.2`… so the upstream base is visible in the tag.
+- `./build.sh release dmg` gives an ad-hoc-signed DMG. Fine for your own Macs (right-click → Open once). A Developer ID ($99/yr) gets you notarisation + a working self-updater.
+- **Updater.swift** polls `officecommun.com` and verifies *their* signature. Untouched, a fork build will one day replace itself with upstream 1.1 and drop every feature. Patch: point the feed at your GitHub Release asset and your signing identity — or a one-line early return until you have a Developer ID. This is a permanent row in `PATCHES.md`.
+- **Bundle id + app name**: change both in `build.sh` so the fork and upstream coexist (separate keychain items, separate `Application Support` folder — `Store.folder` derives from the bundle). Otherwise they fight over `session.json`.
+- Tag `v1.0-fork.1`, `v1.0-fork.2` … so the upstream base is visible in the tag.
 
 ### Weekly checklist (5 min)
-1. Actions ran → merge the sync PR if green.
-2. `swift build` warnings = 0 on `fork`.
-3. Upstream issues/PRs skim — if they're building something on your list (Spaces is the obvious one), stop and wait; theirs will win the rebase.
-4. Anything of yours that's stable and in their spirit → open an upstream issue, then a PR, then delete it from `fork` when merged.
+1. Layer 2 PR green → skim the range-diff → merge.
+2. `swift build` warnings introduced by the fork = 0.
+3. Skim upstream issues/PRs. If they start Spaces or split view, stop yours and wait — theirs wins the rebase. Their CONTRIBUTING asks for an issue before big PRs; file one for anything you'd like to upstream (search engine picker, pin-URL reset, auto-archive, media row are plausible; multi-window and MCP are not).
+4. Anything merged upstream → delete the patch, delete the manifest row.
