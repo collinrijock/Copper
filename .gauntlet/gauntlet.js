@@ -93,7 +93,7 @@ function tree(key) { return `${TREES}/${key}`; }
 
 function builderPrompt(piece, round, feedback) {
   const setup = round === 0
-    ? `Your worktree does not exist yet if this is the folders piece; if \`${tree(piece.key)}\` is missing run \`git -C ${ROOT} worktree add -B gauntlet/${piece.key} ${tree(piece.key)} ${piece.from}\`. Then \`cd ${tree(piece.key)}\`.`
+    ? `If \`${tree(piece.key)}\` is missing run \`git -C ${ROOT} worktree add -B gauntlet/${piece.key} ${tree(piece.key)} ${piece.from}\`. Then \`cd ${tree(piece.key)}\`.`
     : `\`cd ${tree(piece.key)}\` — your worktree from the previous round, with your commits.`;
   return `You are the BUILDER for one piece of a Gauntlet Loop on Copper, a Swift/SwiftUI/WebKit macOS browser. Read ${BRIEF} completely first; then read PATCHES.md, FORK-PLAN.md (the entry for this piece) and the Fork/ sources you will touch.
 
