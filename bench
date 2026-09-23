@@ -32,6 +32,9 @@
     ./bench ext-remove ID
     ./bench spaces [new NAME|select N|next|prev|move N|remove N|profile NAME]
     ./bench groups [new NAME|assign ID NAME|remove ID|suggest ID|dissolve NAME]
+    ./bench groups [toggle NAME|inside PARENT NAME]
+                                       folders: fold or open one (by its whole "A › B" name or
+                                       its last part), or make one inside another
     ./bench sections [save ID|unsave ID|archive [HOURS]|window 12h|24h|48h|never]
                                        the sidebar's Saved and Today blocks: counts per space,
                                        move a tab across the seam, run the archive sweep now

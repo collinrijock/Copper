@@ -70,17 +70,17 @@ struct GroupedRows: View {
                             close: { browser.close(tab) }
                         )
                         .padding(.leading, CGFloat(depth) * Folders.step)
-                        // The folder's colour, as the line its rows hang
-                        // off — where the chevron of the header above them
-                        // is, so the step in reads as a branch and not as a
-                        // row that has slipped.
+                        // A hair of the folder's colour down the middle of
+                        // its header's glyph, under the rows it holds. The
+                        // step in is what says they are inside it; this
+                        // only says which folder, once two are open at once.
                         .overlay(alignment: .leading) {
                             if let group, depth > 0 {
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(folderTint(group).opacity(0.28))
-                                    .frame(width: 1.5)
+                                RoundedRectangle(cornerRadius: 0.5)
+                                    .fill(folderTint(group).opacity(0.2))
+                                    .frame(width: 1)
                                     .padding(.vertical, 3)
-                                    .offset(x: CGFloat(depth - 1) * Folders.step + 10)
+                                    .offset(x: CGFloat(depth - 1) * Folders.step + 13.5)
                             }
                         }
                         if let asked = grouper.suggestion, asked.tab == tab.id {
@@ -145,11 +145,13 @@ struct GroupedRows: View {
 /// A folder's line: fold it, name it, colour it, make another inside it,
 /// or let it go.
 ///
-/// The three columns line up with the rows below it on purpose — the
-/// chevron sits in its own narrow column at the left, the folder glyph
-/// where a favicon goes, and the name where a title does, so a tab stepped
-/// one notch in under this header has its mark under the glyph and its
-/// title under the name.
+/// A folder is a row like any other row, and that is the whole of its
+/// layout: the glyph sits in the row's own 16pt mark column and the name
+/// starts where every title on the column starts, so a folder at the top
+/// level is flush with the saved tabs around it and only the tabs *inside*
+/// it step in — one mark's width, once per level. The chevron costs no
+/// width at all: it takes the glyph's place under the pointer, which is
+/// where Arc keeps its own, and rotates as the folder opens.
 struct GroupHead: View {
     @ObservedObject var browser: Browser
     @ObservedObject var groups = Groups.shared
@@ -166,22 +168,45 @@ struct GroupHead: View {
     @State private var draft = ""
 
     /// A folder with no colour of its own wears the space's, as Arc's do.
+    /// Deeper than the column it sits on, either way round: the folder is
+    /// the one drawn thing in a row of photographed ones, and a wash of the
+    /// ground's own hue would leave it a smudge among real favicons.
     private var colour: Color {
-        group.hue.map { Color(hue: $0, saturation: 0.55, brightness: 0.75) } ?? tint.dot
+        guard let hue = group.hue ?? tint.hue else { return Palette.muted }
+        return Color(hue: hue, saturation: tint.dark ? 0.52 : 0.74, brightness: tint.dark ? 0.82 : 0.54)
+    }
+
+    /// What the folder is made of: paper, not paint. Arc's folder is a pale
+    /// near-white card with the space's colour around it, which is what
+    /// lets it sit in a column of real favicons without shouting over them.
+    private var paper: Color {
+        tint.dark ? Color(hue: group.hue ?? tint.hue ?? 0, saturation: 0.10, brightness: 0.90)
+                  : Color.white.opacity(0.92)
+    }
+
+    /// The mark column: the folder, or — under the pointer, in its place —
+    /// the chevron that says which way a click will go.
+    private var mark: some View {
+        ZStack {
+            ZStack {
+                Image(systemName: "folder.fill").foregroundStyle(paper)
+                Image(systemName: "folder").foregroundStyle(colour)
+            }
+            .font(.system(size: 13))
+            .opacity(hovering ? 0 : 1)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(tint.muted)
+                .rotationEffect(.degrees(group.collapsed ? 0 : 90))
+                .opacity(hovering ? 1 : 0)
+        }
+        .frame(width: 16, height: 16)
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(hovering ? tint.muted : tint.faint)
-                .rotationEffect(.degrees(group.collapsed ? 0 : 90))
-                .frame(width: 10)
-                .padding(.trailing, 6)
-            Image(systemName: "folder.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(colour)
-                .frame(width: 16)
+            mark
                 .padding(.trailing, 8)
             Text(label ?? group.name)
                 .font(.system(size: 13, weight: .medium))
