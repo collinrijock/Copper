@@ -83,12 +83,16 @@ struct CommandPalette: View {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .fill(Palette.ground)
         )
+        // Clip first, cast second. A .shadow draws behind whatever the view
+        // is at that point in the chain, so a .clipShape after it trims the
+        // shadow to the card's own bounds and leaves a flat rectangle with a
+        // hard edge — which is what this was, for two rounds.
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         // No outline. A card this size separates itself by sitting above the
-        // page, and the shadow is what says so — one tight shadow for the
-        // edge, one wide one for the lift.
+        // page, and the shadow is the only thing that says so — one tight
+        // shadow for the edge, one wide one for the lift.
         .shadow(color: .black.opacity(0.09), radius: 3, y: 1)
         .shadow(color: .black.opacity(0.26), radius: 48, y: 20)
-        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .transition(.scale(scale: 0.985, anchor: .top).combined(with: .opacity))
     }
 
@@ -139,17 +143,23 @@ struct CommandPalette: View {
                 Mark(offer: offer, tint: tint, picked: picked, stamp: stamp)
                     .frame(width: 18, height: 18)
 
+                // One weight, picked or not. Going semibold on the selected
+                // row widened it enough to squeeze the muted half out of the
+                // row — so the one row you were about to press Return on was
+                // the one that stopped telling you which space it lived in.
+                // The pill and the tinted hint say "selected" without moving
+                // anything.
                 Text(offer.key)
-                    .font(.system(size: 13.5, weight: picked ? .semibold : .medium))
+                    .font(.system(size: 13.5, weight: .medium))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
 
-                // A host is short and is the half of the row that says which
-                // of four pages called "Inbox" this one is, so it is the
-                // title that gives way when the row runs out of width — a
-                // host cut down to "mail.go…" has stopped being an answer.
+                // A host cut down to "mail.go…" has stopped being an answer
+                // to anything, so it is shown whole and the title — still
+                // readable from its first two thirds — is what gives way
+                // when the row runs out of width.
                 if !offer.detail.isEmpty {
                     Text(offer.detail)
                         .font(.system(size: 12.5))
@@ -159,19 +169,30 @@ struct CommandPalette: View {
                         .layoutPriority(2)
                 }
 
+                // Last to give way: see Suggestion.badge.
+                if !offer.badge.isEmpty {
+                    Text(offer.badge)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Palette.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .layoutPriority(3)
+                }
+
                 Spacer(minLength: 14)
 
-                // Only on the row Return would take. "Switch to Tab" set
-                // down the right of six rows is a column of grey noise that
-                // says the same thing six times; on one row it is an answer
-                // to the only question anyone is asking of this card.
-                if !offer.hint.isEmpty, picked || hovering {
+                // Shown only on the row Return would take — "Switch to Tab"
+                // set down the right of six rows is a column of grey noise
+                // saying the same thing six times — but laid out on every
+                // row, so selecting one changes what the row looks like and
+                // never what it is shaped like.
+                if !offer.hint.isEmpty {
                     Text(offer.hint)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(picked ? tint : Palette.muted.opacity(0.8))
                         .lineLimit(1)
                         .fixedSize()
-                        .transition(.opacity)
+                        .opacity(picked || hovering ? 1 : 0)
                 }
             }
             .padding(.horizontal, 12)
@@ -221,14 +242,15 @@ struct CommandPalette: View {
             }
         }
 
+        /// Bare, the way Arc draws its magnifier: no chip, no plate. A grey
+        /// rounded square behind the glyph reads as a different kind of row
+        /// from the ones wearing a favicon, and the search is the same kind
+        /// of row as all the others.
         private func glyph(_ name: String) -> some View {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(picked ? tint.opacity(0.22) : Palette.wash)
-                .overlay(
-                    Image(systemName: name)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(picked ? tint : Palette.muted)
-                )
+            Image(systemName: name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(picked ? tint : Palette.muted)
+                .frame(width: 18, height: 18)
         }
 
         /// No icon yet — a fresh profile has none, and a sleeping tab has

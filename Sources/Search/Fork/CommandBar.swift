@@ -85,9 +85,8 @@ enum CommandBar {
             // cannot work out from the rest of it, so it goes in the quiet
             // text beside the title, where it is readable on every row — the
             // hint on the right only shows on the row Return would take.
-            let where_ = short(Spaces.shared.name(of: tab))
-            let host = shortDetail(row)
-            row.detail = host.isEmpty ? "· \(where_)" : "\(host) · \(where_)"
+            row.detail = shortDetail(row)
+            row.badge = "· " + short(Spaces.shared.name(of: tab))
             elsewhere.append(row)
             if elsewhere.count == 2 { break }
         }

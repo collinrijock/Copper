@@ -21,6 +21,11 @@ struct Suggestion: Identifiable, Equatable {
     var detail: String = ""
     /// Fork: an SF Symbol for rows that have no site to take an icon from.
     var glyph: String = ""
+    /// Fork: the one piece of a row that must never be truncated away —
+    /// "· Exowatt" on a page that is open in another space. Everything else
+    /// on the row can be worked out by looking at it; which space it lives in
+    /// cannot, so it gives way last.
+    var badge: String = ""
 
     enum Kind {
         /// A page that is open right now.
