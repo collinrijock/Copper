@@ -106,3 +106,44 @@ Commit your own files only (`git add <paths>`, never `git add -A`), one
 logical change per commit, imperative subject. Never rebase, reset, stash
 or touch another branch. The smoothing agent merges the branches into
 `fork` at the end.
+
+## Late changes on `fork` (read this — it overrides piece scopes above and in your prompt)
+
+Felipe landed two features on `fork` after the loop started; every builder must
+merge `fork` into their gauntlet branch **before** their next round (`git merge fork`,
+build must pass):
+
+- **Tab groups** (`Fork/Groups.swift`, `GroupsUI.swift`, `Grouper.swift`; hooks in
+  `Side.swift` `loose` → `GroupedRows`, `Session.Entry.group`). A group is a name, a
+  hue, `collapsed`, over a contiguous run of tabs in the row; persisted in
+  `groups.json`. `./bench groups [new|assign|remove|dissolve] …` and `docs/groups.md`.
+  `arc-import` now emits Arc folders **as groups**; a nested folder's name carries its
+  parents joined with ` › ` (e.g. `Misc › BuildrFi › Useful Internal Pages`).
+- **MCP server** (`Fork/MCP/`) — not a gauntlet surface; leave it alone.
+- **Space swipe** (`Fork/Swipes.swift`): two fingers sideways over the sidebar steps
+  spaces. `./bench swipe left|right|down`.
+
+**Folders piece — new scope.** Do **not** build a `Folder` model or touch `Session`.
+Copper's folders *are* Felipe's groups; make them render like Arc folders:
+- Nesting from the ` › ` names: a group whose name starts with another group's name
+  + ` › ` is its child — draw only the last segment, indented 16pt per level, under
+  its parent's header; collapsing a parent hides its children's headers too.
+- Header row: chevron that rotates, a folder glyph (tinted with the group's hue or
+  the space hue when nil), name in medium weight, muted count on the right only when
+  collapsed. Children's tab rows indent 16pt (plus 16 per nesting level).
+- Context menus already exist on Felipe's header (rename, recolour, ungroup, close
+  all) and tab (Group ›) — keep them; add **New Folder Inside** on a header, which
+  creates a group named `<parent> › <name>`.
+- Bench: add `groups toggle NAME` (collapse/expand) so the critic can open one.
+- Start your worktree from `gauntlet/sidebar` **merged with `fork`**
+  (`git worktree add -B gauntlet/folders <path> gauntlet/sidebar && git merge fork`).
+  Style must match the sidebar piece; do not restyle the sidebar itself.
+
+**Sidebar piece**: after merging `fork`, `Side.swift` gains `GroupedRows`; keep it
+rendering and make its header row match your row style (same inset, 13px, favicon
+column alignment). The critic will see Casual with 14 folders.
+
+**Smoother**: `fork` has moved (Felipe's commits + swipe + arc-import). Merge the
+gauntlet branches into the current `fork`; the `Side.swift` seam between the
+sidebar piece and `GroupedRows` is the expected conflict. Also check `bench swipe left`
+still steps spaces after the merge.
