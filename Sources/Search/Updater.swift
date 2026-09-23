@@ -129,6 +129,7 @@ final class Updater: ObservableObject {
     private var clock: Timer?
 
     private func checkIfDue() {
+        guard Fork.updates || Updater.overridden else { return }
         let last = Store.settings.object(forKey: lastKey) as? Date ?? .distantPast
         guard Updater.overridden || Date().timeIntervalSince(last) > 60 * 60 * 20 else { return }
         check { _ in }
