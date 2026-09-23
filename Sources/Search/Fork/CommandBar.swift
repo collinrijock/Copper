@@ -32,6 +32,7 @@ enum CommandBar {
             .init(id: "passwords", name: "Passwords") { $0.managing = true },
             .init(id: "settings", name: "Settings") { $0.tuning = true },
             .init(id: "clear-history", name: "Clear History") { $0.clearHistory() },
+            .init(id: "split", name: Split.shared.on ? "Close Split View" : "Split View") { Split.shared.toggle(in: $0) },
             .init(id: "new-space", name: "New Space") { Spaces.shared.add(in: $0) },
             .init(id: "next-space", name: "Next Space") { Spaces.shared.step(1, in: $0) },
             .init(id: "prev-space", name: "Previous Space") { Spaces.shared.step(-1, in: $0) },
