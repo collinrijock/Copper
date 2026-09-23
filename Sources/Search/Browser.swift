@@ -639,6 +639,7 @@ final class Browser: NSObject, ObservableObject {
         Shield.shared.compile()
         if #available(macOS 15.4, *) { Extensions.shared.start(for: self) }
         if prefs.bench { Bench.shared.start(for: self) }
+        MCP.shared.start(for: self) // Fork: agents drive this window
         welcoming = !prefs.welcomed
         // Once a day, quietly: is there a newer one?
         Updater.shared.checkIfDue { [weak self] line in self?.announce(line) }

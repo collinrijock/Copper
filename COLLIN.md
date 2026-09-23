@@ -22,7 +22,7 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | 2. Profiles per space | Tier 1 | **shipped** (space context menu › Profile) |
 | 3. Split view (2–4 panes) | Tier 1 | **shipped**, 2 panes (`Fork/Split.swift`, ⌘⇧D) |
 | 4. Command bar | Tier 1 | **shipped** (`Fork/CommandBar.swift`, ⌘K) |
-| 5. Folders in the sidebar | Tier 2 | not started |
+| 5. Folders in the sidebar | Tier 2 | **shipped** as tab groups (`Fork/Groups.swift`, `GroupsUI.swift`) with model-assisted grouping (`Grouper.swift`, `Intelligence.swift`) |
 | 6. Auto-archive | Tier 2 | not started |
 | 7. Little Arc | Tier 2 | not started |
 | 8. Peek | Tier 2 | not started |
@@ -36,7 +36,7 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | 16. Reader mode auto-detect + Ask on page | Tier 3 | reader auto-detect only; Ask on page is Felipe's (agent side) |
 | A. Apple aesthetic (Liquid Glass) | Part 1b | not started |
 | B. Customizability | Part 1b | not started |
-| C. MCP integration (server, then client) | Part 1b | **Felipe's**, not Collin's — see note at top |
+| C. MCP integration (server, then client) | Part 1b | **Felipe's**, not Collin's — see note at top. Server **shipped** (`Fork/MCP/`, Settings › Agents, Playwright-MCP tool names, `--mcp-stdio` bridge, `docs/agents.md`); client not started |
 | D. Sidebar widgets | Part 1b | not started |
 | Maintenance automation (sync workflows, PATCHES.md, release) | Part 2 | **partly shipped**: `PATCHES.md`, updater off, Copper bundle id, `sync-main.yml` + `sync-fork.yml` (Layers 1–2). Left: agent conflict step (Layer 3, wait for the first conflict), release-on-tag |
 
