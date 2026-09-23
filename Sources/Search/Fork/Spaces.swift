@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 // Spaces: several rows of tabs, one on screen at a time.
 //
@@ -12,6 +13,9 @@ struct Space: Codable, Identifiable, Equatable {
     var name: String
     /// A hue, 0…1, or nil for the plain grey.
     var hue: Double?
+    /// Which cookie jar its tabs use: nil for the one every space shares, or
+    /// a name — spaces with the same name sign in together.
+    var profile: String? = nil
 
     var tint: Color { hue.map { Color(hue: $0, saturation: 0.55, brightness: 0.75) } ?? Palette.muted }
 }
@@ -99,6 +103,41 @@ final class Spaces: ObservableObject {
         else if browser.activeID == tab.id { browser.activeID = nil; browser.select(browser.tabs[0]) }
     }
 
+    // MARK: - profiles
+
+    /// The space a tab is being built for — the current one, unless a
+    /// restore is building another space's row.
+    private var buildingFor: UUID?
+
+    func building<T>(for id: UUID, _ make: () -> T) -> T {
+        buildingFor = id
+        defer { buildingFor = nil }
+        return make()
+    }
+
+    func profile(_ id: UUID, named name: String?) {
+        guard let i = all.firstIndex(where: { $0.id == id }) else { return }
+        all[i].profile = name?.isEmpty == true ? nil : name
+    }
+
+    var profiles: [String] { Array(Set(all.compactMap(\.profile))).sorted() }
+
+    /// The store for the space a tab is being built for, or nil for the
+    /// shared one. Read from Store.websites, which WebKit asks off the main
+    /// actor as well; a space's profile only ever changes on it.
+    nonisolated static var profileStore: WKWebsiteDataStore? {
+        MainActor.assumeIsolated {
+            let spaces = Spaces.shared
+            let id = spaces.buildingFor ?? spaces.current
+            guard let name = spaces.all.first(where: { $0.id == id })?.profile else { return nil }
+            // A fixed id per name, so the jar is the same one next launch.
+            var hash: UInt64 = 14_695_981_039_346_656_037
+            for byte in name.utf8 { hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211 }
+            let text = String(format: "C0FFEE00-%04X-4000-8000-%012llX", UInt16(truncatingIfNeeded: hash >> 48), hash & 0xFFFF_FFFF_FFFF)
+            return WKWebsiteDataStore(forIdentifier: UUID(uuidString: text)!)
+        }
+    }
+
     // MARK: - session
 
     /// Every row, on screen or parked, in one shape upstream can still read:
@@ -130,11 +169,11 @@ final class Spaces: ObservableObject {
         var rows: [UUID: (tabs: [Tab], active: Tab.ID?)] = [:]
         for (i, entry) in saved.tabs.enumerated() {
             guard let url = URL(string: entry.url) else { continue }
-            let tab = Tab()
+            let id = entry.space.flatMap { s in all.first { $0.id == s }?.id } ?? current
+            let tab = building(for: id) { Tab() }
             browser.prepare(tab)
             tab.restore(url: url, title: entry.title)
             tab.pin = entry.pin
-            let id = entry.space.flatMap { s in all.first { $0.id == s }?.id } ?? current
             var row = rows[id] ?? ([], nil)
             row.tabs.append(tab)
             // Upstream's file has no `active` flag — its `active` index does.
@@ -170,6 +209,7 @@ struct SpaceStrip: View {
     @ObservedObject var browser: Browser
     @ObservedObject var spaces = Spaces.shared
     @State private var renaming: UUID?
+    @State private var profiling: UUID?
     @State private var draft = ""
 
     var body: some View {
@@ -198,6 +238,13 @@ struct SpaceStrip: View {
                         .padding(8)
                         .onSubmit { spaces.rename(space.id, to: draft); renaming = nil }
                 }
+                .popover(isPresented: Binding(get: { profiling == space.id }, set: { if !$0 { profiling = nil } })) {
+                    TextField("Profile name", text: $draft)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 160)
+                        .padding(8)
+                        .onSubmit { spaces.profile(space.id, named: draft); profiling = nil }
+                }
             }
             Door(icon: "plus", help: "New Space") { spaces.add(in: browser) }
             Spacer(minLength: 0)
@@ -219,6 +266,18 @@ struct SpaceStrip: View {
                     }
                 }
             }
+        }
+        Menu("Profile") {
+            Button { spaces.profile(space.id, named: nil) } label: {
+                Label("Shared", systemImage: space.profile == nil ? "checkmark" : "")
+            }
+            ForEach(spaces.profiles, id: \.self) { name in
+                Button { spaces.profile(space.id, named: name) } label: {
+                    Label(name, systemImage: space.profile == name ? "checkmark" : "")
+                }
+            }
+            Divider()
+            Button("New Profile…") { draft = ""; profiling = space.id }
         }
         if let tab = browser.active, space.id != spaces.current {
             Button("Move Current Tab Here") { spaces.move(tab, to: space.id, in: browser) }
@@ -274,10 +333,11 @@ extension Spaces {
             guard let tab = browser.active else { return ["error": "no active tab"] }
             move(tab, to: id, in: browser)
         case "remove": guard let id = find(arg) else { return ["error": "no space \(arg)"] }; remove(id, in: browser)
+        case "profile": profile(current, named: arg)
         default: break
         }
         return ["spaces": all.enumerated().map { i, s in
-            ["index": i, "name": s.name, "current": s.id == current,
+            ["index": i, "name": s.name, "current": s.id == current, "profile": s.profile ?? "shared",
              "tabs": s.id == current ? browser.tabs.count : (parked[s.id]?.tabs.count ?? 0)] as [String: Any]
         }]
     }

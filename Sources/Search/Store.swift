@@ -48,6 +48,7 @@ enum Store {
     /// between probes the way the real one does. Wiping the test store is
     /// then as safe as wiping its folder.
     static var websites: WKWebsiteDataStore {
+        if let profile = Spaces.profileStore { return profile }
         guard testing, !ownContainer else { return .default() }
         return WKWebsiteDataStore(forIdentifier: probeStore(1))
     }
