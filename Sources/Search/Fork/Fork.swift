@@ -10,4 +10,20 @@ enum Fork {
     /// feed. Running it from a Copper build would replace Copper with Search.
     /// Until there is a Copper feed and a signing identity, it stays off.
     static let updates = false
+
+    /// The bench verbs Copper adds; see Bench.swift's switch.
+    @MainActor static func bench(_ verb: String, _ request: [String: Any], in browser: Browser) -> [String: Any] {
+        switch verb {
+        case "spaces": return Spaces.shared.bench(request, in: browser)
+        case "bar":
+            // What ⌘K would offer for this text, without the keyboard.
+            browser.summon()
+            browser.typed = request["text"] as? String ?? ""
+            let rows = browser.offers.map { ["key": $0.key, "title": $0.title, "kind": "\($0.kind)", "url": $0.url.absoluteString] }
+            if request["go"] as? Bool == true, !browser.offers.isEmpty { browser.picked = 0; browser.submit() }
+            else { browser.editing = false; browser.typed = "" }
+            return ["offers": rows]
+        default: return ["error": "unknown verb \(verb)"]
+        }
+    }
 }

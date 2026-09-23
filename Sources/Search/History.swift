@@ -22,6 +22,8 @@ struct Suggestion: Identifiable, Equatable {
         case known
         /// Not a place at all — words, and an engine to ask.
         case search
+        case bookmark
+        case command
     }
 
     var id: String { key }

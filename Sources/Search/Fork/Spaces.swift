@@ -30,6 +30,7 @@ final class Spaces: ObservableObject {
     /// The rows not on screen, by space.
     private var parked: [UUID: (tabs: [Tab], active: Tab.ID?)] = [:]
     var parkedTabs: [Tab] { parked.values.flatMap(\.tabs) }
+    func parkedRow(_ id: UUID) -> [Tab]? { parked[id]?.tabs }
 
     private init() {
         let home = Space(name: "Home")

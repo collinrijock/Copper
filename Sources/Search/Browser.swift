@@ -1341,7 +1341,7 @@ final class Browser: NSObject, ObservableObject {
 
     private func guess() {
         guard !summoning else {
-            offers = openPages(matching: typed)
+            offers = CommandBar.offers(for: typed, open: openPages(matching: typed), in: self)
             ending = nil
             // The most recent page is already chosen, so ⌘K then Return is the
             // whole gesture.
@@ -1465,11 +1465,16 @@ final class Browser: NSObject, ObservableObject {
     /// those is a place, nothing happens and the field says so.
     func submit() {
         // A page already open is switched to, not opened again.
-        if let picked, offers.indices.contains(picked),
-           let id = offers[picked].tab,
-           let tab = tabs.first(where: { $0.id == id }) {
+        if let picked, offers.indices.contains(picked), let id = offers[picked].tab {
             summoning = false
-            select(tab)
+            editing = false
+            typed = ""
+            // In this row, or in another space's.
+            if let tab = tabs.first(where: { $0.id == id }) { select(tab) } else { _ = Spaces.shared.reveal(id, in: self) }
+            return
+        }
+        if let picked, offers.indices.contains(picked), CommandBar.run(offers[picked].url, in: self) {
+            summoning = false
             editing = false
             typed = ""
             return

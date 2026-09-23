@@ -120,6 +120,14 @@ struct Omnibox: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Palette.muted)
+                case .bookmark:
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Palette.muted)
+                case .command:
+                    Image(systemName: "command")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Palette.muted)
                 case .open:
                     // Already open: naming it takes you back to it rather than
                     // opening a second copy.
