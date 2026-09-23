@@ -215,8 +215,12 @@ extension Session.Entry {
 
 // MARK: - the strip at the foot of the column
 
-struct SpaceStrip: View {
+struct SpaceStrip<Tools: View>: View {
     @ObservedObject var browser: Browser
+    /// The column's own small doors — bookmarks, extensions. They used to sit
+    /// on a row of their own under this one, where a single glyph read as
+    /// something left behind; the foot is one line now, the way Arc's is.
+    @ViewBuilder var tools: () -> Tools
     @ObservedObject var spaces = Spaces.shared
     @Environment(\.colorScheme) private var scheme
     @State private var renaming: UUID?
@@ -236,9 +240,11 @@ struct SpaceStrip: View {
                 dot(space)
             }
             plus
+            tools()
         }
         .padding(.horizontal, 6)
-        .padding(.bottom, 4)
+        .padding(.top, 2)
+        .padding(.bottom, 7)
         .animation(Motion.glide, value: spaces.current)
     }
 
@@ -260,6 +266,9 @@ struct SpaceStrip: View {
         .buttonStyle(.plain)
         .foregroundStyle(tint.ink)
         .help(space.name)
+        // The name is the one thing in this row that must stay readable;
+        // the dots give up their air before it gives up a letter.
+        .layoutPriority(1)
         .modifier(menus(for: space))
     }
 
@@ -284,8 +293,8 @@ struct SpaceStrip: View {
             Circle()
                 .fill(SpaceTint(hue: space.hue, dark: scheme == .dark).dot)
                 .frame(width: 8, height: 8)
-                .opacity(hovering == space.id ? 1 : 0.6)
-                .frame(width: 17, height: 24)
+                .opacity(hovering == space.id ? 1 : 0.65)
+                .frame(width: 14, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -299,7 +308,7 @@ struct SpaceStrip: View {
             Image(systemName: "plus")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(tint.faint)
-                .frame(width: 20, height: 24)
+                .frame(width: 18, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

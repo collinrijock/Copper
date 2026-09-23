@@ -64,8 +64,7 @@ struct SideBar: View {
             newTab
             today
 
-            SpaceStrip(browser: browser)
-            foot
+            SpaceStrip(browser: browser) { foot }
         }
         .frame(width: prefs.sideWidth)
         .frame(maxHeight: .infinity)
@@ -393,16 +392,13 @@ struct SideBar: View {
 
     /// One small door at the bottom: the settings.
     private var foot: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ExtensionSlot(edge: .trailing)
-            Door(icon: "bookmark", help: "Bookmarks") { browser.bookmarksOpen.toggle() }
+            Door(icon: "bookmark", help: "Bookmarks", size: 22) { browser.bookmarksOpen.toggle() }
                 .popover(isPresented: $browser.bookmarksOpen, arrowEdge: .trailing) {
                     BookmarksDropdown(browser: browser, bookmarks: browser.bookmarks)
                 }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, SideBar.inset)
-        .padding(.bottom, 8)
     }
 
 }
@@ -429,7 +425,7 @@ private struct RowMark: View {
             } else {
                 Text(letter)
                     .font(.system(size: size * 0.52, weight: .semibold))
-                    .foregroundStyle(tint.muted)
+                    .foregroundStyle(tint.ink.opacity(0.6))
                     .frame(width: size, height: size)
                     .background(
                         RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
@@ -608,9 +604,14 @@ private struct SideRow: View {
         }
     }
 
+    /// Arc's sidebar is quiet because of its spacing and its tint, never
+    /// because its titles are greyed out: a resting title there is nearly as
+    /// legible as the live one, and a sleeping tab is not dimmed at all. A
+    /// muted resting state makes the whole list read as disabled, which is
+    /// the one thing a list of twenty-five things you keep must not do.
     private var colour: Color {
-        if live { return tint.ink }
-        return hovering ? tint.ink.opacity(0.78) : tint.muted
+        if live || hovering { return tint.ink }
+        return tint.ink.opacity(0.85)
     }
 }
 
@@ -659,6 +660,8 @@ struct Door: View {
     let icon: String
     var on = false
     var help = ""
+    /// The door's square. Smaller where it shares a row with something else.
+    var size: CGFloat = 26
     let act: () -> Void
 
     @State private var hovering = false
@@ -668,12 +671,12 @@ struct Door: View {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(on ? Palette.ink : (hovering ? Palette.ink.opacity(0.7) : Palette.muted))
-                .frame(width: 26, height: 26)
+                .frame(width: size, height: size)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
                         .fill(on ? Palette.wash : (hovering ? Palette.hover : .clear))
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
