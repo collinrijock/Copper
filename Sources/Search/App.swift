@@ -18,7 +18,7 @@ struct SearchApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 780)
         .commands {
-            SpaceCommands(browser: browser)
+            ForkCommands(browser: browser)
             // One window. Tabs are the only kind of "new" there is.
             CommandGroup(replacing: .newItem) {
                 Button("New Tab") { browser.newTab() }
@@ -261,7 +261,7 @@ struct ContentView: View {
 
                     // One stage, always.
                     if let tab = browser.active {
-                        Page(tab: tab)
+                        SplitStage(browser: browser, active: tab)
                             .overlay(alignment: .topTrailing) {
                                 if browser.finding {
                                     FindBar(browser: browser)

@@ -15,6 +15,14 @@ enum Fork {
     @MainActor static func bench(_ verb: String, _ request: [String: Any], in browser: Browser) -> [String: Any] {
         switch verb {
         case "spaces": return Spaces.shared.bench(request, in: browser)
+        case "split":
+            // `split` toggles; `split ID` opens beside the active tab; `split off` closes.
+            let arg = request["arg"] as? String ?? ""
+            if arg == "off" { Split.shared.close() }
+            else if arg.isEmpty { Split.shared.toggle(in: browser) }
+            else if let tab = browser.tabs.first(where: { $0.id.uuidString.lowercased().hasPrefix(arg.lowercased()) }) { Split.shared.open(with: tab, in: browser) }
+            else { return ["error": "no tab \(arg)"] }
+            return ["side": Split.shared.side.map { String($0.uuidString.prefix(8)).lowercased() } ?? "", "active": browser.activeID.map { String($0.uuidString.prefix(8)).lowercased() } ?? ""]
         case "bar":
             // What ⌘K would offer for this text, without the keyboard.
             browser.summon()

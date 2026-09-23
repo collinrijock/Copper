@@ -231,7 +231,7 @@ final class Bench {
         let verb = request["do"] as? String ?? ""
 
         switch verb {
-        case "spaces", "bar":
+        case "spaces", "bar", "split":
             answer(Fork.bench(verb, request, in: browser))
 
         case "tabs":

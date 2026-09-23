@@ -31,6 +31,7 @@
     ./bench ext-enable ID on|off       switch an extension on or off
     ./bench ext-remove ID
     ./bench spaces [new NAME|select N|next|prev|move N|remove N|profile NAME]
+    ./bench split [ID|off]           split the stage with tab ID (toggle with none)
     ./bench bar TEXT [--go]          what ⌘K offers for TEXT; --go takes the first row
     ./bench ui KEY VALUE               settings/passwords/welcome/history/downloads/bookmarks/hidden on|off,
                                        look light|dark|system, sidebar on|off, folded on|off, peek on|off
@@ -109,6 +110,8 @@ def main(argv):
         request["id"] = args[0]
         if len(args) > 1: request["path"] = os.path.abspath(args[1])
         if len(args) > 2: request["width"] = float(args[2])
+    elif verb == "split":
+        request["arg"] = args[0] if args else ""
     elif verb == "bar":
         request["text"] = args[0] if args else ""
         request["go"] = "--go" in args

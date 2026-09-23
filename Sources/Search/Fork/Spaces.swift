@@ -290,12 +290,18 @@ struct SpaceStrip: View {
     }
 }
 
-/// The Spaces menu: ⌃⌥← / ⌃⌥→ to step, ⌃1–9 to jump, ⌃N for a new one.
-struct SpaceCommands: Commands {
+/// Everything Copper adds to the menu bar, in one Commands so upstream's
+/// `.commands {}` gains a single line (the builder takes ten at most).
+struct ForkCommands: Commands {
     @ObservedObject var browser: Browser
     @ObservedObject var spaces = Spaces.shared
+    @ObservedObject var split = Split.shared
 
     var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button(split.on ? "Close Split View" : "Split View") { split.toggle(in: browser) }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+        }
         CommandMenu("Spaces") {
             Button("New Space") { spaces.add(in: browser) }
                 .keyboardShortcut("n", modifiers: [.control])

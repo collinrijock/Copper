@@ -272,7 +272,7 @@ final class Tab: ObservableObject, Identifiable {
         // PageView, and it moves nothing but a disc.
         web.allowsBackForwardNavigationGestures = false
         web.onPull = { [weak self] pull in self?.pull = pull }
-        web.onTouch = { [weak self] in self?.uncover() }
+        web.onTouch = { [weak self] in self?.uncover(); if let self { Tab.touched?(self) } }
         web.holdForFirstFrame()
         // Pages follow the appearance of the window they are drawn in, and the
         // window follows Settings › Appearance — so a site that honours

@@ -712,6 +712,7 @@ final class Browser: NSObject, ObservableObject {
         defer {
             follow()
             watchForSleep()
+            Tab.touched = { [weak self] tab in if let self { Split.shared.touched(tab, in: self) } }
         }
 
         let saved = Session.read()
