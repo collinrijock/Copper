@@ -231,6 +231,9 @@ final class Bench {
         let verb = request["do"] as? String ?? ""
 
         switch verb {
+        case "spaces":
+            answer(Spaces.shared.bench(request, in: browser))
+
         case "tabs":
             answer(["tabs": browser.tabs.map(describe)])
 

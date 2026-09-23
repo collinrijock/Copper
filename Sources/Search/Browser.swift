@@ -8,7 +8,7 @@ import Combine
 
 @MainActor
 final class Browser: NSObject, ObservableObject {
-    @Published private(set) var tabs: [Tab] = []
+    @Published var tabs: [Tab] = []
     @Published var activeID: Tab.ID? {
         didSet {
             // The tab just left is the tab just looked at. Whether a tab has
@@ -715,7 +715,8 @@ final class Browser: NSObject, ObservableObject {
         }
 
         let saved = Session.read()
-        guard !saved.tabs.isEmpty else {
+        Spaces.shared.restore(saved, into: self)
+        guard !tabs.isEmpty else {
             // A blank tab costs nothing until it is asked for its page. Its
             // web view — and with it WebKit's helper processes — is built a
             // moment after the window is up, so that the first address typed
@@ -729,22 +730,6 @@ final class Browser: NSObject, ObservableObject {
             }
             return
         }
-        for entry in saved.tabs {
-            guard let url = URL(string: entry.url) else { continue }
-            let tab = Tab()
-            prepare(tab)
-            tab.restore(url: url, title: entry.title)
-            tab.pin = entry.pin
-            tabs.append(tab)
-        }
-        guard !tabs.isEmpty else {
-            adopt(Tab())
-            return
-        }
-        let here = min(max(0, saved.active), tabs.count - 1)
-        activeID = tabs[here].id
-        // Only the one you were looking at actually loads.
-        tabs[here].wake()
     }
 
     /// The few settings that something else has to be told about. The rest are
@@ -833,22 +818,7 @@ final class Browser: NSObject, ObservableObject {
     }
 
     private func writeSession(now: Bool = false) {
-        Session.write(
-            now: now,
-            .init(
-                tabs: tabs.compactMap { tab in
-                    guard !tab.shy, !tab.bench else { return nil }
-                    // A sleeping tab holds its address in `pending`; asking for
-                    // it there too means a pin can never be written out of
-                    // existence by whatever its web view happens to be showing.
-                    guard let url = tab.pending ?? tab.address,
-                          url.scheme?.hasPrefix("http") == true
-                    else { return nil }
-                    return Session.Entry(url: url.absoluteString, title: tab.title, pin: tab.pin)
-                },
-                active: tabs.firstIndex { $0.id == activeID } ?? 0
-            )
-        )
+        Session.write(now: now, Spaces.shared.shape(visible: tabs, active: activeID))
     }
 
     private func rememberSession() {
@@ -1250,7 +1220,7 @@ final class Browser: NSObject, ObservableObject {
         tab.web.evaluateJavaScript(Isolate.off)
     }
 
-    private func prepare(_ tab: Tab) {
+    func prepare(_ tab: Tab) {
         tab.delegate = self
         tab.onPick = { [weak self] tab, selector, label, note in
             guard let self, let host = curtain.host(of: tab.address) else { return }

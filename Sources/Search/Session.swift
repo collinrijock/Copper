@@ -9,11 +9,15 @@ enum Session {
         var url: String
         var title: String
         var pin: String?
+        var space: UUID? = nil
+        var active: Bool? = nil
     }
 
     struct Shape: Codable {
         var tabs: [Entry]
         var active: Int
+        var spaces: [Space]? = nil
+        var space: UUID? = nil
     }
 
     private static var file: URL { Store.file("session.json") }

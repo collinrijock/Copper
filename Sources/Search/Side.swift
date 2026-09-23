@@ -76,6 +76,7 @@ struct SideBar: View {
 
             VStack {
                 Spacer()
+                SpaceStrip(browser: browser)
                 foot
             }
         }
