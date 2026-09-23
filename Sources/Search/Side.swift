@@ -20,9 +20,6 @@ struct SideBar: View {
 
     @Namespace private var pill
 
-    @State private var dragging: Tab.ID?
-    @State private var from = 0
-    @State private var travel: CGFloat = 0
     @State private var landing = false
     /// The width the column had when the edge was picked up.
     @State private var grabbed: CGFloat?
@@ -124,8 +121,6 @@ struct SideBar: View {
     private var looseRows: [(index: Int, tab: Tab)] {
         browser.tabs.filter { $0.pin == nil }.enumerated().map { (index: $0.offset, tab: $0.element) }
     }
-
-    private var looseCount: Int { browser.tabs.count - browser.pinnedCount }
 
     /// Three squares to a row, four once the column is wide enough to hold
     /// four without shrinking them below a comfortable mark. Never more:
@@ -256,14 +251,13 @@ struct SideBar: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: .infinity)
         .mask(SideBar.fade)
-        .coordinateSpace(name: "rows")
     }
 
     /// Whatever was opened since. Sits under the New Tab row, the way Arc's
     /// today does, and takes only as much of the column as it needs.
     private var today: some View {
         let list = looseRows.filter { !spaces.carried.contains($0.tab.id) }
-        let wanted = CGFloat(list.count) * (SideBar.row + SideBar.gap)
+        let wanted = CGFloat(list.count + GroupedRows.extraRows(in: list.map(\.tab))) * (SideBar.row + SideBar.gap)
         return ScrollView(.vertical, showsIndicators: false) {
             rows(list)
                 .padding(.horizontal, SideBar.inset)
@@ -271,31 +265,12 @@ struct SideBar: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(height: min(wanted, SideBar.todayMax))
         .mask(SideBar.fade)
-        .coordinateSpace(name: "today")
     }
 
-    @ViewBuilder
+    /// One block's rows, drawn by the groups' view so each run wears its
+    /// header and the drag knows about groups; `only` keeps it to this block.
     private func rows(_ list: [(index: Int, tab: Tab)]) -> some View {
-        VStack(spacing: SideBar.gap) {
-            // See the grid: the drag is measured in the column's space, not
-            // the row's, so a row that has just moved keeps its bearings.
-            ForEach(list, id: \.tab.id) { index, tab in
-                let step = SideBar.row + SideBar.gap
-                let held = dragging == tab.id
-                SideRow(
-                    browser: browser,
-                    tab: tab,
-                    live: tab.id == browser.activeID,
-                    tint: tint,
-                    pill: pill,
-                    close: { browser.close(tab) }
-                )
-                .offset(y: held ? travel - CGFloat(index - from) * step : 0)
-                .zIndex(held ? 1 : 0)
-                .shadow(color: .black.opacity(held ? 0.14 : 0), radius: 12, y: 4)
-                .gesture(reorder(tab: tab, index: index, step: step))
-            }
-        }
+        GroupedRows(browser: browser, prefs: prefs, pill: pill, tint: tint, only: Set(list.map(\.tab.id)))
     }
 
     /// A long column runs out under a soft edge rather than a hard one — the
@@ -312,33 +287,6 @@ struct SideBar: View {
             startPoint: .top,
             endPoint: .bottom
         )
-    }
-
-    /// Pick a row up and the others make way as it passes them.
-    private func reorder(tab: Tab, index: Int, step: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 5, coordinateSpace: .named("rows"))
-            .onChanged { value in
-                if dragging != tab.id {
-                    dragging = tab.id
-                    from = index
-                }
-                travel = value.translation.height
-                let moved = Int((travel / step).rounded())
-                let target = min(max(0, from + moved), max(0, looseCount - 1))
-                if target != index {
-                    // Positions here are among the loose rows; the pinned
-                    // block sits in front of them in the real list.
-                    withAnimation(Motion.settle) {
-                        browser.move(tab, to: target + browser.pinnedCount)
-                    }
-                }
-            }
-            .onEnded { _ in
-                withAnimation(Motion.settle) {
-                    dragging = nil
-                    travel = 0
-                }
-            }
     }
 
     /// The quiet line between what was carried over and what was opened
@@ -489,7 +437,7 @@ private struct PinSquare: View {
 }
 
 /// One tab, as a line in the column.
-private struct SideRow: View {
+struct SideRow: View { // Fork: was private; GroupedRows draws it
     @ObservedObject var browser: Browser
     @ObservedObject var tab: Tab
     let live: Bool

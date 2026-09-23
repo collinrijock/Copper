@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Bring Arc's sidebar into Copper: every space, its colour, its pinned tabs
-and folders' tabs, and whatever was left open.
+and folders' tabs (as tab groups, nested names joined with " › "), and whatever
+was left open.
 
     ./arc-import              write ~/Library/Application Support/Copper/session.json
     ./arc-import --world W    write into the test world "Copper (W)" instead
     ./arc-import --dry        print what would be written
 
-Arc's favourites become the pin grid. Copper has no folders yet (FORK-PLAN
-#5), so a space's pinned tabs and its folders' tabs land flat in the loose
+Arc's favourites become the pin grid. Arc folders become Copper's tab
+groups (groups.json + a group id on each entry); groups are flat, so a nested
+folder's name carries its parents. Pinned tabs and open tabs land in the loose
 row, in order, then whatever was left open. Arc documents and easels are skipped. Quit
 Copper first: it writes the session on quit and would overwrite this.
 """
@@ -53,19 +55,30 @@ def main(argv):
     items = {i["id"]: i for i in container["items"] if isinstance(i, dict)}
     arc_spaces = [s for s in container["spaces"] if isinstance(s, dict)]
 
-    def tabs(parent_id):
-        """Every tab under a container, folders and splits flattened."""
-        for cid in items.get(parent_id, {}).get("childrenIds", []):
-            node = items.get(cid)
-            if not node:
-                continue
+    groups = []
+
+    def tabs(parent_id, folder=None):
+        """Every tab under a container: (title, url, group id). Folders become
+        groups, nested names joined; splits are flattened."""
+        # A group is one contiguous run in Copper, so a folder's own tabs go
+        # out before its subfolders; Arc interleaves them.
+        children = [items[c] for c in items.get(parent_id, {}).get("childrenIds", []) if c in items]
+        for node in sorted(children, key=lambda n: "list" in n.get("data", {})):
+            cid = node["id"]
             data = node.get("data", {})
             if "tab" in data:
                 url = data["tab"].get("savedURL", "")
                 if url.startswith("http"):
-                    yield node.get("title") or data["tab"].get("savedTitle") or "", url
-            elif "list" in data or "splitView" in data:
-                yield from tabs(cid)
+                    yield node.get("title") or data["tab"].get("savedTitle") or "", url, folder
+            elif "list" in data:
+                name = node.get("title") or "Folder"
+                if folder:
+                    name = next(g["name"] for g in groups if g["id"] == folder) + " › " + name
+                gid = str(uuid.uuid4()).upper()
+                groups.append({"id": gid, "name": name, "collapsed": True})
+                yield from tabs(cid, gid)
+            elif "splitView" in data:
+                yield from tabs(cid, folder)
 
     # Favourites — the grid at the top of every space of the default profile.
     tops = container["topAppsContainerIDs"]
@@ -89,12 +102,13 @@ def main(argv):
         # Arc's favourites grid is Copper's pin grid; Arc's per-space pinned
         # tabs have titles, so they are loose tabs here, followed by what was
         # left open.
-        for title, url in favourites:
+        for title, url, _ in favourites:
             host = url.split("/")[2].replace("www.", "")
             entries.append({"url": url, "title": title, "pin": host[:1].upper() or "•", "space": sid})
         row = list(tabs(pinned)) + list(tabs(unpinned))
-        for i, (title, url) in enumerate(row):
-            entries.append({"url": url, "title": title, "space": sid, **({"active": True} if i == 0 else {})})
+        for i, (title, url, gid) in enumerate(row):
+            entries.append({"url": url, "title": title, "space": sid, **({"active": True} if i == 0 else {}),
+                            **({"group": gid} if gid else {})})
 
     current = next((sp["id"] for sp in spaces if sp["name"] == "Exowatt"), spaces[0]["id"])
     shape = {"tabs": entries, "active": 0, "spaces": spaces, "space": current}
@@ -102,12 +116,16 @@ def main(argv):
     for sp in spaces:
         n = sum(1 for e in entries if e["space"] == sp["id"])
         p = sum(1 for e in entries if e["space"] == sp["id"] and "pin" in e)
-        print(f"{sp['name']:22} {n:4} tabs ({p} pinned)  hue={sp.get('hue')}")
+        g = {e["group"] for e in entries if e["space"] == sp["id"] and "group" in e}
+        print(f"{sp['name']:22} {n:4} tabs ({p} pinned, {len(g)} folders)  hue={sp.get('hue')}")
     if dry:
         return
     os.makedirs(os.path.dirname(out), exist_ok=True)
     json.dump(shape, open(out, "w"))
-    print(f"wrote {out}")
+    used = {e["group"] for e in entries if "group" in e}
+    groups_out = os.path.join(os.path.dirname(out), "groups.json")
+    json.dump({"groups": [g for g in groups if g["id"] in used], "rules": []}, open(groups_out, "w"))
+    print(f"wrote {out} and groups.json ({len(used)} folders)")
 
 
 if __name__ == "__main__":

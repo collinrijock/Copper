@@ -1,6 +1,8 @@
 # What Collin is working on — Copper
 
-Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 3 MB WebKit browser for macOS by Office Commun. The goal is an Arc-class replacement built on WebKit: spaces, profiles, split view, a command bar, and the rest of the daily Arc features, without a Chromium engine. On top of that, Copper adds a Liquid Glass aesthetic for macOS 26, deep customizability through one theme file and one settings pane, MCP integration in both directions (Copper as an MCP server that agents can drive, and an MCP client living in the sidebar), and a sidebar widget board. Scope: everything in FORK-PLAN.md, in the order listed there. Nothing outside it is planned.
+Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 3 MB WebKit browser for macOS by Office Commun. The goal is an Arc-class replacement built on WebKit: spaces, profiles, split view, a command bar, and the rest of the daily Arc features, without a Chromium engine. On top of that, Copper adds a Liquid Glass aesthetic for macOS 26, deep customizability through one theme file and one settings pane, and a sidebar widget board. Scope: Part 1, Part 1b A/B/D and Part 2 of FORK-PLAN.md, in the order listed there.
+
+**Not Collin's — Felipe owns the agent side:** MCP integration (Copper as an MCP server / client), any Jev integration, and Stagehand-style browser automation. Those sections stay in the plan below for context only; do not start them from this document.
 
 ## Where things live
 
@@ -20,7 +22,7 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | 2. Profiles per space | Tier 1 | **shipped** (space context menu › Profile) |
 | 3. Split view (2–4 panes) | Tier 1 | **shipped**, 2 panes (`Fork/Split.swift`, ⌘⇧D) |
 | 4. Command bar | Tier 1 | **shipped** (`Fork/CommandBar.swift`, ⌘K) |
-| 5. Folders in the sidebar | Tier 2 | not started |
+| 5. Folders in the sidebar | Tier 2 | **shipped** as tab groups (`Fork/Groups.swift`, `GroupsUI.swift`) with model-assisted grouping (`Grouper.swift`, `Intelligence.swift`) |
 | 6. Auto-archive | Tier 2 | not started |
 | 7. Little Arc | Tier 2 | not started |
 | 8. Peek | Tier 2 | not started |
@@ -31,10 +33,10 @@ Copper is Collin's fork of [Search](https://github.com/driceroland/Search), the 
 | 13. Tab search across spaces | Tier 3 | **shipped** with the command bar (⌘K lists other spaces’ pages) |
 | 14. Media controls / now-playing in sidebar | Tier 3 | not started |
 | 15. Downloads tray in sidebar | Tier 3 | not started |
-| 16. Reader mode auto-detect + Ask on page | Tier 3 | not started |
+| 16. Reader mode auto-detect + Ask on page | Tier 3 | reader auto-detect only; Ask on page is Felipe's (agent side) |
 | A. Apple aesthetic (Liquid Glass) | Part 1b | not started |
 | B. Customizability | Part 1b | not started |
-| C. MCP integration (server, then client) | Part 1b | not started |
+| C. MCP integration (server, then client) | Part 1b | **Felipe's**, not Collin's — see note at top. Server **shipped** (`Fork/MCP/`, Settings › Agents, Playwright-MCP tool names, `--mcp-stdio` bridge, `docs/agents.md`); client not started |
 | D. Sidebar widgets | Part 1b | not started |
 | Maintenance automation (sync workflows, PATCHES.md, release) | Part 2 | **partly shipped**: `PATCHES.md`, updater off, Copper bundle id, `sync-main.yml` + `sync-fork.yml` (Layers 1–2). Left: agent conflict step (Layer 3, wait for the first conflict), release-on-tag |
 
@@ -205,9 +207,9 @@ Arc has almost none; Vivaldi/Zen have too much. Aim: **one JSON file + one Setti
 5. **Per-site boosts** (Part 1 #10) cover page-side customisation.
 6. **New-tab page** = the widget board (see D) — no separate "start page" concept.
 
-### C. MCP integration
+### C. MCP integration — **Felipe's, kept here for context**
 
-Two directions; do the server first, it is the one nothing else provides on WebKit.
+Collin is not doing this section (nor Jev or Stagehand work). Two directions; do the server first, it is the one nothing else provides on WebKit.
 
 #### C1. Search as an MCP **server** (agents drive the browser)
 Chrome DevTools MCP and Playwright MCP exist for Chromium; nothing for a WebKit browser with your real sessions/cookies. That is the differentiator: Claude Code / phi drive *your* logged-in browser.
@@ -257,13 +259,13 @@ Persisted in `Store.file("widgets.json")`. `Side.swift` becomes `VStack { pins; 
 4. **Downloads** — existing panel data, last 3 rows. ~30 lines.
 5. **Todo** — list of `{text, done}`; ~60 lines.
 6. **Clock / calendar** — `TimelineView(.everyMinute)`; calendar via `EventKit` (needs the Calendars entitlement + a prompt). ~80 lines.
-7. **Agent** — the C2 chat. Ships when C2 does.
+7. **Agent** — the C2 chat. Felipe's; ships when C2 does.
 8. **Tabs preview** — thumbnails of the other spaces' tabs (`Tab.cover` snapshots exist for sleep). ~50 lines.
 9. **HTML widgets** — user-authored: a folder in `Application Support/Search/Widgets/<name>/index.html` rendered in a web panel with a tiny `window.search` JS bridge (`tabs.list`, `tabs.open`, `page.text`) via `WKScriptMessageHandler`. This is the "customisable" escape hatch and needs no plugin API design. ~120 lines.
 
 **Layout:** cards use `.glassEffect` on 26 (see A) and `Material` before; height drag handle at the bottom edge; ⌥-click title to collapse; right-click → remove / move to top / per-space toggle. Empty new-tab page shows the same board full-width (B.6).
 
-**Order:** D1 web panel first (unlocks Slack/Calendar immediately), then D2/D3/D4 (trivial), then the board's drag/resize polish, then D9, then D7 with C2.
+**Order:** D1 web panel first (unlocks Slack/Calendar immediately), then D2/D3/D4 (trivial), then the board's drag/resize polish, then D9. D7 lands whenever Felipe's C2 does.
 
 ---
 

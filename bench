@@ -31,6 +31,9 @@
     ./bench ext-enable ID on|off       switch an extension on or off
     ./bench ext-remove ID
     ./bench spaces [new NAME|select N|next|prev|move N|remove N|profile NAME]
+    ./bench groups [new NAME|assign ID NAME|remove ID|suggest ID|dissolve NAME]
+    ./bench agent [on|off|rotate]    the MCP server agents drive the window through
+    ./bench ai [mode off|ask|auto]   which model lanes have keys, and the grouper's last note
     ./bench split [ID|off]           split the stage with tab ID (toggle with none)
     ./bench bar TEXT [--go]          what ⌘K offers for TEXT; --go takes the first row
     ./bench ui KEY VALUE               settings/passwords/welcome/history/downloads/bookmarks/hidden on|off,
@@ -110,7 +113,7 @@ def main(argv):
         request["id"] = args[0]
         if len(args) > 1: request["path"] = os.path.abspath(args[1])
         if len(args) > 2: request["width"] = float(args[2])
-    elif verb == "split":
+    elif verb in ("split", "swipe"):
         request["arg"] = args[0] if args else ""
     elif verb == "bar":
         request["text"] = args[0] if args else ""
@@ -120,9 +123,9 @@ def main(argv):
     elif verb == "window":
         if not args: sys.exit("usage: bench window PATH")
         request["path"] = os.path.abspath(args[0])
-    elif verb == "spaces":
+    elif verb in ("spaces", "groups", "agent", "ai"):
         request["op"] = args[0] if args else "list"
-        request["arg"] = args[1] if len(args) > 1 else ""
+        request["arg"] = " ".join(args[1:]) if len(args) > 1 else ""
     elif verb == "ui":
         if len(args) != 2: sys.exit("usage: bench ui KEY VALUE")
         key, value = args

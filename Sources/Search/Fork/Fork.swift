@@ -11,11 +11,40 @@ enum Fork {
     /// feed. Running it from a Copper build would replace Copper with Search.
     /// Until there is a Copper feed and a signing identity, it stays off.
     static let updates = false
+    /// What the MCP server and the model clients say they are.
+    static var version: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+    }
+
+    /// A group name from a host: `docs.github.com` → `Github`. For "New
+    /// Group from Tab", where a word is needed before anyone has typed one.
+    static func brand(_ host: String?) -> String {
+        guard let host = host?.lowercased(), !host.isEmpty else { return "Group" }
+        var parts = host.split(separator: ".").map(String.init)
+        if parts.first == "www" { parts.removeFirst() }
+        // The registrable label: the one before the public suffix, roughly —
+        // second from the end, or third when the end looks like `co.uk`.
+        let two = Set(["co", "com", "org", "net", "ac", "gov", "edu"])
+        let core: String
+        if parts.count >= 3, two.contains(parts[parts.count - 2]), parts.last!.count == 2 { core = parts[parts.count - 3] }
+        else if parts.count >= 2 { core = parts[parts.count - 2] }
+        else { core = parts.first ?? "Group" }
+        return core.prefix(1).uppercased() + core.dropFirst()
+    }
 
     /// The bench verbs Copper adds; see Bench.swift's switch.
     @MainActor static func bench(_ verb: String, _ request: [String: Any], in browser: Browser) -> [String: Any] {
         switch verb {
         case "spaces": return Spaces.shared.bench(request, in: browser)
+        case "groups": return Groups.shared.bench(request, in: browser)
+        case "agent": return MCP.shared.bench(request)
+        case "ai":
+            // `ai` reports; `ai mode off|ask|auto`; `ai last` is the grouper's last note.
+            let arg = request["arg"] as? String ?? ""
+            if request["op"] as? String == "mode", let mode = Intelligence.GroupingMode(rawValue: arg) { Intelligence.shared.keys.grouping = mode }
+            let k = Intelligence.shared.keys
+            return ["jev": Intelligence.shared.jevReady, "router": Intelligence.shared.routerReady, "routerModel": k.routerModel,
+                    "routerURL": k.routerURL, "mode": k.grouping.rawValue, "threshold": k.threshold, "last": Grouper.shared.lastNote]
         case "split":
             // `split` toggles; `split ID` opens beside the active tab; `split off` closes.
             let arg = request["arg"] as? String ?? ""
@@ -32,6 +61,7 @@ enum Fork {
             if request["go"] as? Bool == true, !browser.offers.isEmpty { browser.picked = 0; browser.submit() }
             else { browser.editing = false; browser.typed = "" }
             return ["offers": rows]
+        case "swipe": return SpaceSwipe.bench(request["arg"] as? String ?? "left", in: browser)
         case "summon":
             // ⌘K left open with this text in it, for a look at the bar itself.
             browser.summon()

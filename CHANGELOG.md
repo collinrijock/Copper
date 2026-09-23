@@ -11,6 +11,13 @@ in [ROADMAP.md](ROADMAP.md).
 
 ## Unreleased
 
+### Added (Copper)
+
+- **Agents drive the window you have open.** Settings › Agents turns on an MCP server on 127.0.0.1 (bearer token, Origin-checked) with Playwright MCP's tool names — `browser_snapshot`, `browser_click`, `browser_type`, `browser_navigate`, `browser_take_screenshot`, `browser_tabs` and the rest — so a skill written for Playwright works on your real tabs and sign-ins. Clicks and keys arrive as real events; refs come from an accessibility snapshot. Copy-config buttons for Claude Code / phi (HTTP) and Claude Desktop (`--mcp-stdio` pipe, launches Copper if needed). `./bench agent`.
+- **Tab groups**, with a colour and a header in the sidebar; fold, rename, recolour, ungroup, close all. Drag a tab into a run to join it. ⌃G, the tab's context menu › Group, and a Groups menu.
+- **Smart grouping.** A second after a page lands, Copper weighs it against your groups: your rules first (`github.com → Code`), then Jev (TypeSafe System One — one typed choice, ~200 ms, with a confidence), then the router (LiteLLM, Sonnet by default) when Jev is unsure or a new group needs a name, then a plain same-site match with no keys at all. Ask mode puts a one-line chip under the tab; Automatic just does it. Only the tab's address and title and your group names leave the Mac.
+- **Settings › Intelligence**: paste a Jev key and a router key (eye/paste buttons, 0600 file beside the session), pick the router model, set Jev's confidence bar, add rules, and test both lanes with one click. `./bench ai`, `./bench groups`.
+
 ### Added
 
 - ⌘S folds the sidebar away and the page takes the whole window; the left edge brings the tabs back out. Thanks [@kndpt](https://github.com/kndpt) ([#7](https://github.com/driceroland/Search/pull/7))

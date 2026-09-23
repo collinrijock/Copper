@@ -639,6 +639,7 @@ final class Browser: NSObject, ObservableObject {
         Shield.shared.compile()
         if #available(macOS 15.4, *) { Extensions.shared.start(for: self) }
         if prefs.bench { Bench.shared.start(for: self) }
+        MCP.shared.start(for: self) // Fork: agents drive this window
         welcoming = !prefs.welcomed
         // Once a day, quietly: is there a newer one?
         Updater.shared.checkIfDue { [weak self] line in self?.announce(line) }
@@ -713,6 +714,7 @@ final class Browser: NSObject, ObservableObject {
             follow()
             watchForSleep()
             Tab.touched = { [weak self] tab in if let self { Split.shared.touched(tab, in: self) } }
+            SpaceSwipe.watch(self)
         }
 
         let saved = Session.read()
@@ -908,6 +910,7 @@ final class Browser: NSObject, ObservableObject {
     /// behind; closing that blank tab closes the window.
     func close(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        Grouper.shared.forget(tab.id) // Fork
 
         // A tab whose page is out in the little window takes the window with
         // it. Left alone, the window would go on holding a page belonging to a
@@ -1752,6 +1755,7 @@ extension Browser: WKNavigationDelegate, WKUIDelegate {
         Favicons.shared.fetch(for: tab)
         guard !tab.shy, !tab.bench else { return }
         history.record(url, title: tab.title)
+        Grouper.shared.landed(tab, in: self) // Fork: where does this tab belong?
     }
 
     private func fail(_ webView: WKWebView, _ error: Error) {
