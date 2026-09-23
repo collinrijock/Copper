@@ -12,7 +12,12 @@ import WebKit
 //   rect()      — where it is, in viewport CSS pixels, after scrolling it in.
 //   setValue()  — a value the framework notices (native setter + events).
 //   and the rest of what the tools need when there is no window to click in.
+//
+// Nested in Tools because upstream already has a `Page` — the SwiftUI view in
+// Stage.swift — and a second one at the top of the module is the one the
+// compiler stops seeing. Inside Tools the short name still reads as `Page`.
 
+extension Tools {
 enum Page {
     struct Failure: Error { let text: String }
 
@@ -406,4 +411,5 @@ enum Page {
       return true;
     })();
     """#
+}
 }
