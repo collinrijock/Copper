@@ -137,7 +137,7 @@ Use `copper extract "…"` for structured reads, `copper shot` for a screenshot,
 
 ### grunts
 
-**Settings › Agents › Connect this browser to grunts** gives your [grunts](https://works.grunts.dev) bots the same tools the local agents get — `copper__jev_run`, `copper__browser_snapshot` and the rest — through the grunts service. Copper dials out (nothing new listens on your Mac), each bot gets access only after you grant it, every call shows in the bottom line and under *Recent calls*, and *Revoke link* takes the tools away from every bot at once. Paste a personal token (`fxb_…`) minted at Agents › Connect in grunts; it stays in `agent.json`, readable by you alone. From the shell: `copper link on|off|status|grants|grant @bot|revoke [@bot]|calls`. Details in [docs/agents.md](docs/agents.md#grunts--your-bots-use-this-browser).
+**Settings › Agents › Connect this browser to grunts** gives your [grunts](https://works.grunts.dev) bots the same tools the local agents get — `copper__jev_run`, `copper__browser_snapshot` and the rest — through the grunts service. Copper dials out (nothing new listens on your Mac), each bot gets access only after you grant it, every call shows in the bottom line and under *Recent calls*, and *Revoke link* takes the tools away from every bot at once. Paste a personal token (`fxb_…`) minted at Agents › Connect in grunts; it stays in `agent.json`, readable by you alone. From the shell: `copper link on|off|status|grants|grant @bot|revoke [@bot]|calls`. Details in [docs/agents.md](docs/agents.md#grunts--your-bots-use-this-browser); how it is built in [docs/grunts-link.md](docs/grunts-link.md).
 
 ### Sessions
 
