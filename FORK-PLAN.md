@@ -158,6 +158,8 @@ Arc has almost none; Vivaldi/Zen have too much. Aim: **one JSON file + one Setti
 
 Two directions; do the server first, it is the one nothing else provides on WebKit.
 
+**Status (Felipe's lane):** server, Jev mode, CLI and client shipped (see COLLIN.md). **grunts link shipped** — `Fork/MCP/Link.swift` + `LinkWire.swift`: Copper dials out to the grunts FluxBots service and serves these same tools to the owner's granted grunts bots (Settings › Agents › grunts, `copper link …`, `docs/agents.md`).
+
 #### C1. Search as an MCP **server** (agents drive the browser)
 Chrome DevTools MCP and Playwright MCP exist for Chromium; nothing for a WebKit browser with your real sessions/cookies. That is the differentiator: Claude Code / phi drive *your* logged-in browser.
 
