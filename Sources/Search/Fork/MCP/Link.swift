@@ -1,20 +1,20 @@
 import Foundation
 import SystemConfiguration
 
-// Copper as a grunts link: the owner's grunts bots get this window's tools.
+// Copper as an agent link: the owner's bots get this window's tools.
 //
 // The MCP server in MCP.swift listens on 127.0.0.1 and nothing off this Mac
 // can reach it — which is right, and also why a bot running in the cloud
 // can't. So this side dials out instead. It registers the browser with the
-// grunts FluxBots service as a *link* (`POST /v1/me/links`), holds one
+// configured agents app as a *link* (`POST /v1/me/links`), holds one
 // server-sent-events stream open (`GET …/frames`), and answers each
 // `request` frame by handing the JSON-RPC message to the same
 // `MCP.shared.handle` the loopback server uses, then posting the reply back
 // (`POST …/frames`). The service is the hub: a bot only sees these tools
 // after the owner grants it, and every call is written down on both sides.
 //
-// The credential is the owner's personal grunts token (`fxb_…`). It lives in
-// agent.json (0600, beside the loopback token), goes only to the grunts app
+// The credential is the owner's personal token (`fxb_…`). It lives in
+// agent.json (0600, beside the loopback token), goes only to the agents app
 // address in `api`, and is never logged. Copper's own loopback token never
 // leaves the Mac. The link works whether or not the loopback listener is
 // on; it needs a window, like every tool call does.
@@ -22,39 +22,33 @@ import SystemConfiguration
 // Wire parsing lives in LinkWire.swift, which has no app in it.
 
 @MainActor
-final class GruntsLink: ObservableObject {
-    static let shared = GruntsLink()
-
+final class AgentLink: ObservableObject, Identifiable {
     typealias Grant = LinkWire.Grant
     typealias Bot = LinkWire.Bot
     typealias Call = LinkWire.Call
 
-    nonisolated static let defaultAPI = "https://d1f7u5irlufr5t.cloudfront.net"
-
-    /// Stored in agent.json under `grunts`, beside the MCP server's own
-    /// settings (see `MCP.Config.grunts`).
     struct Config: Codable, Equatable {
+        var id = UUID().uuidString
         var enabled = false
-        var api = GruntsLink.defaultAPI
+        var api = ""
         var token = ""
         var name = "copper"
         var linkId: String?
-        /// Say each bot's tool call in the line at the bottom.
         var announces = true
+        var label = ""
 
-        init() {}
+        init(id: String = UUID().uuidString) { self.id = id }
 
-        // Lenient, like MCP.Config: an older file, or one a later version
-        // wrote, must still read — a missing key is its default.
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
             enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
-            api = try c.decodeIfPresent(String.self, forKey: .api) ?? GruntsLink.defaultAPI
+            api = try c.decodeIfPresent(String.self, forKey: .api) ?? ""
             token = try c.decodeIfPresent(String.self, forKey: .token) ?? ""
             name = try c.decodeIfPresent(String.self, forKey: .name) ?? "copper"
             linkId = try c.decodeIfPresent(String.self, forKey: .linkId)
             announces = try c.decodeIfPresent(Bool.self, forKey: .announces) ?? true
-            if api.trimmingCharacters(in: .whitespaces).isEmpty { api = GruntsLink.defaultAPI }
+            label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
             if name.isEmpty { name = "copper" }
         }
     }
@@ -107,16 +101,19 @@ final class GruntsLink: ObservableObject {
             case .unauthorized: return "Token rejected — mint a new one"
             case .revoked: return "The link was revoked"
             case .superseded: return "Another Copper took this link — switch off and on to take it back"
-            case .http(let status, let why): return why.isEmpty ? "grunts answered \(status)" : "grunts answered \(status): \(why)"
+            case .http(let status, let why): return why.isEmpty ? "The app answered \(status)" : "The app answered \(status): \(why)"
             case .transport(let why): return why
             }
         }
     }
 
+    let id: String
+    private var onChange: () -> Void
+
     @Published var config: Config {
         didSet {
             guard config != oldValue else { return }
-            MCP.shared.config.grunts = config
+            onChange()
             react(from: oldValue)
         }
     }
@@ -143,9 +140,13 @@ final class GruntsLink: ObservableObject {
     /// The live progress reporters of in-flight jev_run / jev_step calls.
     private var reporters: [String: JevProgressReporter] = [:]
 
-    private init() {
-        config = MCP.shared.config.grunts ?? Config()
+    init(config: Config, onChange: @escaping () -> Void = {}) {
+        self.id = config.id
+        self.onChange = onChange
+        self.config = config
     }
+
+    func bind(onChange: @escaping () -> Void) { self.onChange = onChange }
 
     /// From `MCP.start(for:)`, once Copper has a window. Nothing connects
     /// before this — a CLI invocation of the binary never dials out.
@@ -156,6 +157,14 @@ final class GruntsLink: ObservableObject {
     }
 
     var tokenReady: Bool { config.token.hasPrefix("fxb_") && config.token.count > 8 }
+
+    /// The name shown in announcements and status. A nickname wins; otherwise
+    /// the app host is the least surprising product-neutral label.
+    var appName: String {
+        let nickname = config.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !nickname.isEmpty { return nickname }
+        return URL(string: config.api)?.host ?? config.api
+    }
 
     /// "Copper on Felipe's MacBook Pro".
     static var label: String { "Copper on \(computerName)" }
@@ -278,8 +287,8 @@ final class GruntsLink: ObservableObject {
 
     private func createLink() async throws {
         let body: [String: Any] = [
-            "name": config.name, "label": GruntsLink.label, "kind": "mcp",
-            "device": GruntsLink.device, "clientVersion": Fork.version,
+            "name": config.name, "label": AgentLink.label, "kind": "mcp",
+            "device": AgentLink.device, "clientVersion": Fork.version,
         ]
         let object = try await send("POST", ["v1", "me", "links"], body: body, gone: .notFound)
         guard let made = LinkWire.Link(object) else { throw Failure.http(200, "no link in the answer") }
@@ -304,7 +313,7 @@ final class GruntsLink: ObservableObject {
     private func stream(_ g: Int) async throws -> Bool {
         guard let id = config.linkId else { throw Failure.setup("No link yet") }
         var request = try makeRequest("GET", ["v1", "me", "links", id, "frames"],
-                                      query: [URLQueryItem(name: "device", value: GruntsLink.device),
+                                      query: [URLQueryItem(name: "device", value: AgentLink.device),
                                               URLQueryItem(name: "clientVersion", value: Fork.version)],
                                       timeout: 45) // the service pings every 15 s; three missed is a dead stream
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -317,11 +326,11 @@ final class GruntsLink: ObservableObject {
             guard current(g) else { return online }
             switch item {
             case .refused(let code, let data):
-                throw GruntsLink.classify(code, data, gone: .revoked)
+                throw AgentLink.classify(code, data, gone: .revoked)
             case .opened:
                 online = true
                 lastError = nil
-                status = .online(link?.label ?? GruntsLink.label)
+                status = .online(link?.label ?? appName)
                 beat = Task { [weak self] in
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(15))
@@ -334,8 +343,12 @@ final class GruntsLink: ObservableObject {
                 case .hello(let described, let items):
                     if let described { link = described }
                     grants = items
-                    status = .online(described?.label ?? link?.label ?? GruntsLink.label)
+                    status = .online(described?.label ?? link?.label ?? appName)
                 case .request(let request):
+                    // A reconnect replays what the service still holds as
+                    // pending; a call this window is already running must
+                    // not start a second time.
+                    guard serving[request.id] == nil else { break }
                     Task { [weak self] in await self?.serve(request, linkId: id, generation: g) }
                 case .grants(let items):
                     grants = items
@@ -378,7 +391,7 @@ final class GruntsLink: ObservableObject {
                 reporter = made
             }
             let who = request.caller.botHandle.isEmpty ? "bot" : request.caller.botHandle
-            rpc = await MCP.shared.handle(request.message, announce: config.announces ? .prefix("grunts · @\(who)") : .quiet)
+            rpc = await MCP.shared.handle(request.message, announce: config.announces ? .prefix("@\(who) · \(appName)") : .quiet)
             // The last progress frame goes before the reply.
             await reporter?.finish()
             reporters[request.id] = nil
@@ -490,7 +503,7 @@ final class GruntsLink: ObservableObject {
     }
 
     /// The service's record of calls, newest first — what the owner sees in
-    /// grunts, including calls made while this window was not watching.
+    /// the app, including calls made while this window was not watching.
     func fetchCalls(limit: Int = 20) async throws -> [Call] {
         let id = try linkID()
         return LinkWire.calls(try await guarded {
@@ -559,7 +572,7 @@ final class GruntsLink: ObservableObject {
             throw Failure.transport(describe(error))
         }
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(code) else { throw GruntsLink.classify(code, data, gone: gone) }
+        guard (200..<300).contains(code) else { throw AgentLink.classify(code, data, gone: gone) }
         return data.isEmpty ? nil : try? JSONSerialization.jsonObject(with: data)
     }
 
@@ -587,7 +600,7 @@ final class GruntsLink: ObservableObject {
         if let url = error as? URLError {
             switch url.code {
             case .notConnectedToInternet, .networkConnectionLost: return "Offline"
-            case .timedOut: return "grunts stopped answering"
+            case .timedOut: return "The app stopped answering"
             case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed: return "Can't reach \(URL(string: config.api)?.host ?? "the app")"
             default: return url.localizedDescription
             }
@@ -603,6 +616,7 @@ final class GruntsLink: ObservableObject {
             "enabled": config.enabled, "api": config.api, "name": config.name, "linkId": config.linkId ?? "",
             "tokenSet": !config.token.isEmpty, "announces": config.announces,
             "status": status.key, "statusText": status.text, "online": status.isOnline,
+            "id": id, "app": appName, "nickname": config.label,
             "label": link?.label ?? "", "grants": grants.map(\.json),
             "recentCalls": recentCalls.count, "lastError": lastError ?? "",
         ]
@@ -636,7 +650,7 @@ final class GruntsLink: ObservableObject {
                 return summary
             case "token":
                 guard !arg.isEmpty else { return ["error": "link token needs fxb_…"] }
-                guard arg.hasPrefix("fxb_") else { return ["error": "that isn't a grunts personal token (fxb_…)"] }
+                guard arg.hasPrefix("fxb_") else { return ["error": "that isn't a personal token (fxb_…)"] }
                 config.token = arg
                 return config.enabled ? await settled() : summary
             case "api":
@@ -647,7 +661,7 @@ final class GruntsLink: ObservableObject {
                 return ["grants": try await refreshGrants().map(\.json)]
             case "grant":
                 let bot = try await resolve(arg, among: .bots)
-                guard let grant = try await setGrant(bot, enabled: true) else { return ["error": "grunts did not return the grant"] }
+                guard let grant = try await setGrant(bot, enabled: true) else { return ["error": "the app did not return the grant"] }
                 return ["grant": grant.json]
             case "revoke":
                 if arg.isEmpty {
@@ -658,7 +672,7 @@ final class GruntsLink: ObservableObject {
                 try await removeGrant(bot)
                 return ["removed": bot]
             case "calls":
-                if let calls = try? await fetchCalls(limit: 20) { return ["source": "grunts", "calls": calls.map(\.json)] }
+                if let calls = try? await fetchCalls(limit: 20) { return ["source": "agents", "calls": calls.map(\.json)] }
                 return ["source": "local", "calls": recentCalls.map(\.json)]
             default:
                 return ["error": "unknown link command: \(op)"]
@@ -680,13 +694,13 @@ final class GruntsLink: ObservableObject {
         }
         let all = try await listBots()
         if let bot = all.first(where: { $0.id == raw || $0.handle.lowercased() == wanted }) { return bot.id }
-        if !raw.hasPrefix("@") { return raw } // an id the list did not show; let grunts decide
+        if !raw.hasPrefix("@") { return raw } // an id the list did not show; let the app decide
         throw Failure.setup("no bot \(raw)")
     }
 
     /// After switching on: wait a few seconds for the first answer, so the
     /// CLI can say online or why not.
-    private func settled() async -> [String: Any] {
+    func settled() async -> [String: Any] {
         for _ in 0..<40 {
             if status != .connecting { break }
             try? await Task.sleep(for: .milliseconds(200))

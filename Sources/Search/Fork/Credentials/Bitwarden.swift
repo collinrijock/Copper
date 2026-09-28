@@ -171,9 +171,9 @@ final class Bitwarden: ObservableObject {
 
     nonisolated static var installed: Bool { executableURL != nil }
 
-    /// Where `bw` is, first match wins: `SEARCH_BW_PATH` (the grunts daemon
-    /// points its LaunchAgent at the CLI it installed), the grunts-installed
-    /// `~/.grunts/bin/bw`, then Homebrew's, then `$PATH`.
+    /// Where `bw` is, first match wins: `SEARCH_BW_PATH` (the daemon points
+    /// its LaunchAgent at the CLI it installed), a CLI an external installer
+    /// placed at `~/.grunts/bin/bw`, then Homebrew's, then `$PATH`.
     nonisolated static var executableURL: URL? {
         let files = FileManager.default
         if let raw = ProcessInfo.processInfo.environment["SEARCH_BW_PATH"]?
@@ -181,9 +181,9 @@ final class Bitwarden: ObservableObject {
             let path = (raw as NSString).expandingTildeInPath
             if files.isExecutableFile(atPath: path) { return URL(fileURLWithPath: path) }
         }
-        let grunts = files.homeDirectoryForCurrentUser
+        let external = files.homeDirectoryForCurrentUser
             .appendingPathComponent(".grunts/bin/bw", isDirectory: false).path
-        for path in [grunts, "/opt/homebrew/bin/bw", "/usr/local/bin/bw"]
+        for path in [external, "/opt/homebrew/bin/bw", "/usr/local/bin/bw"]
         where files.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
         }

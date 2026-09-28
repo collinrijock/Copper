@@ -1,6 +1,6 @@
 import Foundation
 
-// The wire of the grunts link, with nothing of the app in it: the SSE
+// The wire of the agent link, with nothing of the app in it: the SSE
 // reader, the frames that come down it, the frames that go back up, and the
 // lenient readers for the service's objects. Foundation only, on purpose —
 // it compiles on its own next to a test file, so the parsing is checked

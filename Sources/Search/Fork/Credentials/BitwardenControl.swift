@@ -1,15 +1,15 @@
 import Foundation
 
-// `copper bitwarden …` and the grunts Mac page's Bitwarden panel land here,
+// `copper bitwarden …` and the headless Mac page's Bitwarden panel land here,
 // through the loopback server's `copper/bitwarden` method (MCP.swift) — never
-// through the grunts link, which refuses every `copper/*` method.
+// through the agent link, which refuses every `copper/*` method.
 //
 // What goes out is a status report: whether the CLI is there, its version,
 // signed-in / locked / unlocked, the account email, the server, the last
 // sync, the agent-access policy and how many logins, identities and cards
 // the unlocked cache holds. Never a password, an API secret, a session key
-// or a vault value. What comes in for `login` is the sealed payload the
-// grunts daemon decrypted (server, email, master password, optional API key,
+// or a vault value. What comes in for `login` is the sealed payload an
+// external daemon decrypted (server, email, master password, optional API key,
 // optional two-step code, policy); the secrets go to `bw` through the child's
 // environment only (Bitwarden.run) and are gone when this returns.
 

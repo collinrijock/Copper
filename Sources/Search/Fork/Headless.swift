@@ -6,9 +6,9 @@ import WebKit
 
 // Headless Copper: `Copper --headless`, or SEARCH_HEADLESS=1.
 //
-// The same browser, run by a daemon on a Mac nobody is sitting at (the grunts
+// The same browser, run by a daemon on a Mac nobody is sitting at (a headless
 // Mac mini): no Dock icon, no menu bar, no window anyone can see, and nothing
-// that waits for a click. The loopback MCP server and the grunts link run
+// that waits for a click. The loopback MCP server and the agent link run
 // exactly as they do in the windowed app — they are the only way in.
 //
 // WebKit still has to lay pages out and paint them: Jev indexes elements by
@@ -178,7 +178,7 @@ enum Headless {
             }
             .store(in: &bag)
         for window in NSApp.windows { Parking.park(window) }
-        log("browser ready — agent server \(MCP.shared.config.enabled ? "on" : "off") at \(MCP.shared.endpoint), Jev \(MCP.shared.config.jev ? "on" : "off"), grunts link \(MCP.shared.config.grunts?.enabled == true ? "on" : "off")")
+        log("browser ready — agent server \(MCP.shared.config.enabled ? "on" : "off") at \(MCP.shared.endpoint), Jev \(MCP.shared.config.jev ? "on" : "off"), \(AgentLinks.shared.all.filter { $0.config.enabled }.count) agent links on")
     }
 
     /// What `copper health` and /health say about the process.
