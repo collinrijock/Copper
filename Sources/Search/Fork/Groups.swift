@@ -183,9 +183,14 @@ final class Groups: ObservableObject {
         let clean = name.trimmingCharacters(in: .whitespaces)
         guard !clean.isEmpty, let i = all.firstIndex(where: { $0.id == id }) else { return }
         let was = all[i].name
+        let home = all[i].space
         all[i].name = clean
-        if all.filter({ $0.name == was }).isEmpty {
-            for j in all.indices where Folders.below(all[j].name, was) {
+        // Another space's folder of the same name is no rival: its children
+        // are told apart by their space. (An unmarked folder claims them all,
+        // as it always has.)
+        func mine(_ g: TabGroup) -> Bool { home == nil || g.space == nil || g.space == home }
+        if all.filter({ $0.name == was && mine($0) }).isEmpty {
+            for j in all.indices where Folders.below(all[j].name, was) && mine(all[j]) {
                 all[j].name = clean + Folders.mark + String(all[j].name.dropFirst(was.count + Folders.mark.count))
             }
         }
@@ -198,7 +203,10 @@ final class Groups: ObservableObject {
     func createInside(_ parent: TabGroup, named name: String) -> TabGroup? {
         let clean = name.trimmingCharacters(in: .whitespaces)
         guard !clean.isEmpty else { return nil }
-        let made = create(named: Folders.inside(parent, named: clean), hue: parent.hue)
+        // Its own folder, in the parent's space: the same path may well be
+        // another space's folder already, and `create` would hand that back.
+        let made = adding(named: Folders.inside(parent, named: clean), hue: parent.hue)
+        if let i = all.firstIndex(where: { $0.id == made.id }) { all[i].space = parent.space ?? Spaces.shared.current; save() }
         // A folder inside a plain one is plain too: both wear the space's
         // colour, and `create` would otherwise deal it one off the wheel.
         if parent.hue == nil { tint(made.id, hue: nil) }

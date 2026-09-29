@@ -210,6 +210,7 @@ struct FolderTree {
                     if let last = open.last { due(last, at: index, closing: false) }
                     open.append(folder)
                     head(folder, at: index)
+                    due(folder, at: index, closing: false)
                 }
             }
             for folder in open { under[folder.id, default: 0] += 1 }

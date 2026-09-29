@@ -301,7 +301,8 @@ final class Spaces: ObservableObject {
                 // spaces' `Misc` stay apart without a suffix — and a suffix
                 // on `Misc` would cut `Misc › BuildrFi` loose from it.
                 let group = Groups.shared.adding(named: incomingGroup.name, hue: incomingGroup.hue)
-                Groups.shared.imported(group.id, collapsed: incomingGroup.collapsed, space: space.id, slot: incomingGroup.slot)
+                Groups.shared.imported(group.id, collapsed: incomingGroup.collapsed,
+                                       space: incomingGroup.slot == nil ? nil : space.id, slot: incomingGroup.slot)
                 groups[incomingGroup.id] = group
                 groupCount += 1
             }

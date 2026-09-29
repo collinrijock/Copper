@@ -73,6 +73,7 @@ def main(argv):
     groups = []
     opened = expanded()
     space_id = None  # the Copper space the walk is in, for empty folders
+    pinned_walk = False
 
     def tabs(parent_id, folder=None, split=None):
         """Every tab under a container: (title, url, group id, last active,
@@ -100,13 +101,18 @@ def main(argv):
                 if folder:
                     name = next(g["name"] for g in groups if g["id"] == folder) + " › " + name
                 gid = str(uuid.uuid4()).upper()
-                group = {"id": gid, "name": name, "collapsed": cid not in opened, "slot": down}
-                if space_id:
-                    group["space"] = space_id
+                group = {"id": gid, "name": name, "collapsed": cid not in opened}
                 groups.append(group)
+                slot, held = down, 0
                 for row in tabs(cid, gid):
                     down += 1
+                    held += 1
                     yield row
+                # Only a folder empty in Arc's Saved list needs telling where
+                # it stands; one with tabs is wherever they are, and would
+                # otherwise come back as a ghost once emptied.
+                if not held and pinned_walk and space_id:
+                    group["space"], group["slot"] = space_id, slot
             elif "splitView" in data:
                 for row in tabs(cid, folder, str(uuid.uuid4()).upper()):
                     down += 1
@@ -141,8 +147,12 @@ def main(argv):
             entries.append({"url": url, "title": title, "pin": host[:1].upper() or "•", "space": sid})
         # Saved first, then Today newest-first — except that a folder is one
         # run in Copper, so grouped rows keep their own order after the rest.
-        today = sorted(tabs(unpinned), key=lambda t: (t[2] or "", -(t[3] or 0)))
-        row = [(t, True) for t in tabs(pinned)] + [(t, False) for t in today]
+        # Arc's own order, as its Today list shows it.
+        today = list(tabs(unpinned))
+        pinned_walk = True
+        saved = list(tabs(pinned))
+        pinned_walk = False
+        row = [(t, True) for t in saved] + [(t, False) for t in today]
         for i, ((title, url, gid, when, split), kept) in enumerate(row):
             entries.append({"url": url, "title": title, "space": sid, "saved": kept,
                             **({"seen": when} if when else {}),

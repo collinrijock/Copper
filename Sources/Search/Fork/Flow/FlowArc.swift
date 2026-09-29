@@ -241,6 +241,7 @@ enum FlowArc {
 
         // The folders Arc has open, in any window. Arc keeps this per window
         // rather than on the folder; everything else comes in shut.
+        var pinnedWalk = false
         let opened: Set<String> = {
             let windows = file.deletingLastPathComponent().appendingPathComponent("StorableWindows.json")
             guard let data = try? Data(contentsOf: windows),
@@ -293,9 +294,15 @@ enum FlowArc {
                     }
                     var group = FlowModel.Group(name: name)
                     group.collapsed = !opened.contains(id)
-                    group.slot = result.count
+                    let slot = result.count
                     groups.append(group)
-                    result += tabs(in: id, folder: group.id, groups: &groups)
+                    let held = tabs(in: id, folder: group.id, groups: &groups)
+                    // Only an empty folder in the Saved list needs a place of
+                    // its own; one with tabs stands wherever they do.
+                    if held.isEmpty, pinnedWalk, let at = groups.firstIndex(where: { $0.id == group.id }) {
+                        groups[at].slot = slot
+                    }
+                    result += held
                 } else if data["splitView"] != nil {
                     result += tabs(in: id, folder: folder, split: UUID(), groups: &groups)
                 }
@@ -422,17 +429,11 @@ enum FlowArc {
                 return tab
             }
 
+            pinnedWalk = true
             let pinned = pinnedID.map { tabs(in: $0, folder: nil, groups: &groups) } ?? []
-            let unpinned = unpinnedID.map { tabs(in: $0, folder: nil, groups: &groups) } ?? []
-            let today = unpinned.enumerated().sorted { left, right in
-                let leftGroup = left.element.group?.uuidString ?? ""
-                let rightGroup = right.element.group?.uuidString ?? ""
-                if leftGroup != rightGroup { return leftGroup < rightGroup }
-                let leftSeen = left.element.seen ?? 0
-                let rightSeen = right.element.seen ?? 0
-                if leftSeen != rightSeen { return leftSeen > rightSeen }
-                return left.offset < right.offset
-            }.map(\.element)
+            pinnedWalk = false
+            // Arc's own order, as its Today list shows it.
+            let today = unpinnedID.map { tabs(in: $0, folder: nil, groups: &groups) } ?? []
 
             var rows: [(RawTab, Bool)] = pinned.map { ($0, true) }
             rows.append(contentsOf: today.map { ($0, false) })
